@@ -310,7 +310,8 @@ function updateAll() {
     if(c.language)tags+='<span class="tag tag-lang">'+(LANGS[c.language]||c.language)+'</span>';
     if(c.handoffRequested&&!c.humanJoined&&!c.handoffResolved)tags+='<span class="tag tag-handoff">Handoff pending</span>';
     if(c.humanJoined)tags+='<span class="tag tag-human">You are live</span>';
-    return '<div class="'+cls+'" onclick="openConv(\''+c.id+'\')">' +
+    return '<div class="'+cls+'" style="position:relative" onclick="openConv(\''+c.id+'\')">' +
+  '<button onclick="event.stopPropagation();deleteConv(\''+c.id+'\')" style="position:absolute;top:8px;right:8px;background:#fee;border:1px solid #fcc;color:#c00;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer">Delete</button>' +
       '<div class="conv-header"><div class="conv-email">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+'</div><div class="conv-time">'+time+'</div></div>' +
       '<div class="conv-preview">'+preview+'</div><div class="conv-tags">'+tags+'</div></div>';
   }).join('');
