@@ -403,9 +403,9 @@ async function renderMsgs(msgs) {
       html+='<div class="msg system-m"><div class="msg-bubble">&mdash; '+esc(m.content)+' &mdash;</div></div>';
     } else if(m.role==='user'){
       var translation='';
-      if(m.content){
+      if(m.content && activeLang !== 'en'){
         var t = await translateToEN(m.content);
-        if(t) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
+        if(t && t !== m.content) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
       }
       html+='<div class="msg user"><div><div class="msg-bubble">'+esc(m.content||'')+'</div>'+translation+'</div></div>';
     } else if(m.role==='human'){
