@@ -420,9 +420,12 @@ async function renderMsgs(msgs) {
     } else if(m.role==='user'){
       var translation='';
       if(m.content){
-        var t = await translateToEN(m.content);
-        if(t) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
-      }
+        if(m.content){
+  if(activeLang !== 'en') {
+    var t = await translateToEN(m.content);
+    if(t) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
+  }
+}
       html+='<div class="msg user"><div><div class="msg-bubble">'+esc(m.content||'')+'</div>'+translation+'</div></div>';
     } else if(m.role==='human'){
       html+='<div class="msg human"><div class="msg-av k">K</div><div class="msg-bubble">'+esc(m.content||'')+'</div></div>';
