@@ -101,6 +101,8 @@ body{background:#f0f4f0;min-height:100vh}
 .msg-translation{font-size:11px;color:#aaa;font-style:italic;margin-top:3px;padding:0 2px}
 .chat-input-area{padding:12px 16px;background:#fff;border-radius:0 0 14px 14px;border:1.5px solid #e8f0e5;border-top:1px solid #e8f0e5}
 .ai-suggestions{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.ai-sugg{background:#e8f4e8;color:#2d5a28;border:1px solid #c8e6c4;padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;transition:all .15s}
+.ai-sugg:hover{background:#4a7c45;color:#fff}
 .chat-inp-row{display:flex;gap:8px}
 .chat-inp{flex:1;padding:10px 14px;border-radius:22px;border:1.5px solid #c8e6c4;font-size:13.5px;outline:none;background:#f4faf3;color:#1a1a1a}
 .chat-inp:focus{border-color:#4a7c45;box-shadow:0 0 0 3px rgba(74,124,69,0.1)}
@@ -121,41 +123,41 @@ body{background:#f0f4f0;min-height:100vh}
   <div class="topbar-logo"><img src="https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216"/></div>
   <div><div class="topbar-title">Mr.Leaf Dashboard</div><div class="topbar-sub">Green T-Shirts AI Assistant</div></div>
   <div class="topbar-right">
-    <button class="notif-btn" id="notif-btn" onclick="requestNotifications()">&#128276; Enable Notifications</button>
+    <button class="notif-btn" id="notif-btn" onclick="requestNotifications()">🔔 Enable Notifications</button>
     <div class="topbar-status"><div class="status-dot"></div>Live</div>
   </div>
 </div>
 <div class="nav">
-  <button class="nav-btn active" onclick="showTab('analytics')">&#128202; Analytics</button>
-  <button class="nav-btn" onclick="showTab('conversations')">&#128172; Conversations</button>
-  <button class="nav-btn" onclick="showTab('emails')">&#128231; Emails</button>
+  <button class="nav-btn active" onclick="showTab('analytics')">📊 Analytics</button>
+  <button class="nav-btn" onclick="showTab('conversations')">💬 Conversations</button>
+  <button class="nav-btn" onclick="showTab('emails')">📧 Emails</button>
 </div>
 <div class="main">
   <div id="handoff-alerts"></div>
   <div id="tab-analytics">
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-icon">&#128172;</div><div class="stat-label">Total Conversations</div><div class="stat-value" id="stat-total">-</div><div class="stat-change" id="stat-today">-</div></div>
-      <div class="stat-card"><div class="stat-icon">&#128231;</div><div class="stat-label">Emails Collected</div><div class="stat-value" id="stat-emails">-</div><div class="stat-change">Registered customers</div></div>
-      <div class="stat-card"><div class="stat-icon">&#129309;</div><div class="stat-label">Handoff Requests</div><div class="stat-value" id="stat-handoffs">-</div><div class="stat-change">Wanted human agent</div></div>
-      <div class="stat-card"><div class="stat-icon">&#127758;</div><div class="stat-label">Languages</div><div class="stat-value" id="stat-langs">-</div><div class="stat-change">Different languages</div></div>
+      <div class="stat-card"><div class="stat-icon">💬</div><div class="stat-label">Total Conversations</div><div class="stat-value" id="stat-total">-</div><div class="stat-change" id="stat-today">-</div></div>
+      <div class="stat-card"><div class="stat-icon">📧</div><div class="stat-label">Emails Collected</div><div class="stat-value" id="stat-emails">-</div><div class="stat-change">Registered customers</div></div>
+      <div class="stat-card"><div class="stat-icon">🤝</div><div class="stat-label">Handoff Requests</div><div class="stat-value" id="stat-handoffs">-</div><div class="stat-change">Wanted human agent</div></div>
+      <div class="stat-card"><div class="stat-icon">🌍</div><div class="stat-label">Languages</div><div class="stat-value" id="stat-langs">-</div><div class="stat-change">Different languages</div></div>
     </div>
     <div class="charts-row">
-      <div class="card"><div class="card-title">Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
-      <div class="card"><div class="card-title">Languages</div><div class="lang-list" id="lang-chart"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">📈 Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">🌍 Languages</div><div class="lang-list" id="lang-chart"><div class="loading">Loading...</div></div></div>
     </div>
     <div class="charts-row">
-      <div class="card"><div class="card-title">Peak hours</div><div class="hours-grid" id="hours-chart"></div></div>
-      <div class="card"><div class="card-title">Top questions</div><div class="top-q-list" id="top-questions"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">⏰ Peak hours</div><div class="hours-grid" id="hours-chart"></div></div>
+      <div class="card"><div class="card-title">❓ Top questions</div><div class="top-q-list" id="top-questions"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
   <div id="tab-conversations" style="display:none">
     <div id="conv-list-view">
-      <div class="card"><div class="card-title">All Conversations</div><div class="conv-list" id="conv-list"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">💬 All Conversations</div><div class="conv-list" id="conv-list"><div class="loading">Loading...</div></div></div>
     </div>
     <div id="conv-chat-view" style="display:none">
       <div class="chat-panel">
         <div class="chat-panel-header">
-          <button class="back-btn" onclick="showConvList()">&larr; Back</button>
+          <button class="back-btn" onclick="showConvList()">← Back</button>
           <div>
             <div class="chat-panel-email" id="cpanel-email">-</div>
             <div style="font-size:12px;color:#888" id="cpanel-lang"></div>
@@ -176,7 +178,7 @@ body{background:#f0f4f0;min-height:100vh}
     </div>
   </div>
   <div id="tab-emails" style="display:none">
-    <div class="card"><div class="card-title">Collected Emails</div><div id="emails-list"><div class="loading">Loading...</div></div></div>
+    <div class="card"><div class="card-title">📧 Collected Emails</div><div id="emails-list"><div class="loading">Loading...</div></div></div>
   </div>
 </div>
 
@@ -207,7 +209,7 @@ var activeLang = 'en';
 var unsub = null;
 var isJoined = false;
 var notifEnabled = false;
-var translationCache = {};
+var translationCache = {}; // cache μεταφράσεων για ταχύτητα
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(e) { console.log('SW error', e); });
@@ -218,7 +220,7 @@ window.requestNotifications = async function() {
     var perm = await Notification.requestPermission();
     if (perm === 'granted') {
       notifEnabled = true;
-      document.getElementById('notif-btn').textContent = 'Notifications ON';
+      document.getElementById('notif-btn').textContent = '🔔 Notifications ON';
       document.getElementById('notif-btn').classList.add('enabled');
       try {
         var messaging = getMessaging(app);
@@ -242,7 +244,7 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   allConvs.forEach(c => {
     if (c.handoffRequested && !c.humanJoined && !c.handoffResolved) {
       if (!prev.includes(c.id)) {
-        sendBrowserNotification('Customer needs you!', (c.email && c.email !== 'anonymous' ? c.email : 'Anonymous') + ' wants to speak with you');
+        sendBrowserNotification('🔔 Customer needs you!', (c.email && c.email !== 'anonymous' ? c.email : 'Anonymous') + ' wants to speak with you');
       }
     }
   });
@@ -283,14 +285,14 @@ function updateAll() {
   var hmax=Math.max(...hrs,1);
   document.getElementById('hours-chart').innerHTML = hrs.map((c,h)=>{
     var cls=c===0?'':c/hmax>0.6?'busy':'active';
-    return '<div class="hour-cell '+cls+'" title="'+h+':00 - '+c+' chats">'+h+'</div>';
+    return '<div class="hour-cell '+cls+'" title="'+h+':00 — '+c+' chats">'+h+'</div>';
   }).join('');
 
   var qmap={};
   allConvs.forEach(c=>{if(c.messages)c.messages.filter(m=>m.role==='user').forEach(m=>{var t=(m.content||'').substring(0,60);qmap[t]=(qmap[t]||0)+1;});});
   var qsorted=Object.entries(qmap).sort((a,b)=>b[1]-a[1]).slice(0,5);
   document.getElementById('top-questions').innerHTML = qsorted.length ? qsorted.map(([q,c],i)=>
-    '<div class="top-q-item"><div class="top-q-rank">'+(i+1)+'</div><div class="top-q-text">'+esc(q)+'</div><div class="top-q-count">x'+c+'</div></div>'
+    '<div class="top-q-item"><div class="top-q-rank">'+(i+1)+'</div><div class="top-q-text">'+esc(q)+'</div><div class="top-q-count">×'+c+'</div></div>'
   ).join('') : '<div class="empty">No questions yet</div>';
 
   var cl = document.getElementById('conv-list');
@@ -320,13 +322,14 @@ function updateAll() {
 function renderHandoffAlerts() {
   var pending=allConvs.filter(c=>c.handoffRequested&&!c.humanJoined&&!c.handoffResolved);
   document.getElementById('handoff-alerts').innerHTML = pending.map(c=>
-    '<div class="handoff-alert"><div class="handoff-icon">&#128276;</div>' +
+    '<div class="handoff-alert"><div class="handoff-icon">🔔</div>' +
     '<div class="handoff-info"><div class="handoff-title">Customer wants to speak with you!</div>' +
-    '<div class="handoff-sub">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+' &mdash; Language: '+(LANGS[c.language]||c.language||'Unknown')+'</div></div>' +
-    '<button class="handoff-join-btn" onclick="openConv(\''+c.id+'\')">Join Chat &rarr;</button></div>'
+    '<div class="handoff-sub">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+' — Language: '+(LANGS[c.language]||c.language||'Unknown')+'</div></div>' +
+    '<button class="handoff-join-btn" onclick="openConv(\''+c.id+'\')">Join Chat →</button></div>'
   ).join('');
 }
 
+// Μεταφράζει κείμενο στη γλώσσα του πελάτη — με cache για ταχύτητα
 async function translate(text, toLang) {
   var key = text + '|' + toLang;
   if (translationCache[key]) return translationCache[key];
@@ -340,6 +343,7 @@ async function translate(text, toLang) {
   } catch(e){return text;}
 }
 
+// Μεταφράζει στα Αγγλικά για εμφάνιση στο dash — με cache
 async function translateToEN(text) {
   if (!text || !text.trim()) return null;
   if (translationCache['EN|'+text]) return translationCache['EN|'+text];
@@ -351,6 +355,17 @@ async function translateToEN(text) {
     if (result) translationCache['EN|'+text] = result;
     return result;
   } catch(e){return null;}
+}
+
+async function getSuggestions(lastMsg) {
+  try {
+    var r = await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({isDashboard:true, system:'You are helping a Green T-Shirts customer service agent. Generate exactly 3 SHORT suggested replies (max 12 words each) in English or Greek. Return ONLY a JSON array of strings. Example: ["Sure, let me check!", "Of course!", "Could you tell me more?"]',
+      messages:[{role:'user',content:'Customer said: "'+lastMsg+'"'}]})});
+    var d = await r.json();
+    var t=(d.content&&d.content[0]?d.content[0].text:'[]').replace(/```json|```/g,'').trim();
+    return JSON.parse(t);
+  } catch(e){return [];}
 }
 
 window.openConv = async function(id) {
@@ -370,6 +385,7 @@ window.openConv = async function(id) {
 
   if(unsub) unsub();
   var convRef=doc(db,'conversations',id);
+  var lastSuggTs=0;
   unsub = onSnapshot(convRef, async(snap)=>{
     if(!snap.exists()) return;
     var data=snap.data();
@@ -377,20 +393,15 @@ window.openConv = async function(id) {
     isJoined=data.humanJoined||false;
     updateBtns(data);
 
-    // Ανανέωσε τη γλώσσα αν άλλαξε ο πελάτης
-    if(data.language && data.language !== activeLang) {
-      activeLang = data.language;
-      document.getElementById('cpanel-lang').textContent='Language: '+(LANGS[activeLang]||activeLang);
-    }
-
     var tb=document.getElementById('live-typing-bar');
     if(data.liveTyping&&data.liveTyping.length>0){
-      tb.textContent='Customer typing: "'+data.liveTyping+'"';
+      tb.textContent='✏️ Customer typing: "'+data.liveTyping+'"';
       tb.classList.add('active');
     } else {
       tb.textContent='Waiting for customer to type...';
       tb.classList.remove('active');
     }
+
   });
 }
 
@@ -400,7 +411,7 @@ async function renderMsgs(msgs) {
   for(var i=0;i<msgs.length;i++){
     var m=msgs[i];
     if(m.role==='system'){
-      html+='<div class="msg system-m"><div class="msg-bubble">&mdash; '+esc(m.content)+' &mdash;</div></div>';
+      html+='<div class="msg system-m"><div class="msg-bubble">— '+esc(m.content)+' —</div></div>';
     } else if(m.role==='user'){
       var translation='';
       if(m.content){
@@ -459,11 +470,13 @@ window.sendMsg = async function() {
   var text=inp.value.trim();
   if(!text||!activeId) return;
   inp.value='';
+  document.getElementById('ai-suggestions').innerHTML='';
 
   var convRef=doc(db,'conversations',activeId);
   var conv=allConvs.find(c=>c.id===activeId);
   var msgs=(conv&&conv.messages)?[...conv.messages]:[];
 
+  // Μεταφράζει πάντα στη γλώσσα του πελάτη
   var translated = await translate(text, activeLang);
 
   msgs.push({role:'human',content:translated,originalContent:text,ts:Date.now()});
