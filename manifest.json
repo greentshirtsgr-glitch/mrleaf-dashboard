@@ -1,0 +1,22 @@
+{
+  "name": "Mr.Leaf Dashboard",
+  "short_name": "Mr.Leaf",
+  "description": "Green T-Shirts AI Chat Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2d5a28",
+  "theme_color": "#2d5a28",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216",
+      "sizes": "192x192",
+      "type": "image/webp"
+    },
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216",
+      "sizes": "512x512",
+      "type": "image/webp"
+    }
+  ]
+}
