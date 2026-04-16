@@ -129,6 +129,7 @@ body{background:#f0f4f0;min-height:100vh}
   <button class="nav-btn active" onclick="showTab('analytics')">&#128202; Analytics</button>
   <button class="nav-btn" onclick="showTab('conversations')">&#128172; Conversations</button>
   <button class="nav-btn" onclick="showTab('emails')">&#128231; Emails</button>
+  <button class="nav-btn" onclick="showTab('visitors')">&#128065; Online Now</button>
 </div>
 <div class="main">
   <div id="handoff-alerts"></div>
@@ -177,6 +178,9 @@ body{background:#f0f4f0;min-height:100vh}
   </div>
   <div id="tab-emails" style="display:none">
     <div class="card"><div class="card-title">Collected Emails</div><div id="emails-list"><div class="loading">Loading...</div></div></div>
+  </div>
+  <div id="tab-visitors" style="display:none">
+    <div class="card"><div class="card-title">&#128065; Online Now</div><div id="visitors-list"><div class="loading">Loading...</div></div></div>
   </div>
 </div>
 
@@ -250,6 +254,22 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   renderHandoffAlerts();
 });
 
+onSnapshot(collection(db, 'visitors'), (snap) => {
+  var now = Date.now();
+  var online = snap.docs.map(d=>({id:d.id,...d.data()}))
+    .filter(v=>(now-(v.lastSeen||0)) < 5*60*1000)
+    .sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
+  var vl = document.getElementById('visitors-list');
+  if(!vl) return;
+  vl.innerHTML = online.length ? online.map(v=>
+    '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
+    '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
+    '<div><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
+    '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div></div>' +
+    '</div>'
+  ).join('') : '<div class="empty">No visitors online right now</div>';
+});
+
 function updateAll() {
   var total = allConvs.length;
   var today = allConvs.filter(c=>new Date(c.startedAt).toDateString()===new Date().toDateString()).length;
@@ -304,8 +324,7 @@ function updateAll() {
     if(c.language)tags+='<span class="tag tag-lang">'+(LANGS[c.language]||c.language)+'</span>';
     if(c.handoffRequested&&!c.humanJoined&&!c.handoffResolved)tags+='<span class="tag tag-handoff">Handoff pending</span>';
     if(c.humanJoined)tags+='<span class="tag tag-human">You are live</span>';
-    return '<div class="'+cls+'" style="position:relative" onclick="openConv(\''+c.id+'\')">' +
-  '<button onclick="event.stopPropagation();deleteConv(\''+c.id+'\')" style="position:absolute;top:8px;right:8px;background:#fee;border:1px solid #fcc;color:#c00;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer">Delete</button>' +
+    return '<div class="'+cls+'" onclick="openConv(\''+c.id+'\')">' +
       '<div class="conv-header"><div class="conv-email">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+'</div><div class="conv-time">'+time+'</div></div>' +
       '<div class="conv-preview">'+preview+'</div><div class="conv-tags">'+tags+'</div></div>';
   }).join('');
@@ -404,9 +423,9 @@ async function renderMsgs(msgs) {
       html+='<div class="msg system-m"><div class="msg-bubble">&mdash; '+esc(m.content)+' &mdash;</div></div>';
     } else if(m.role==='user'){
       var translation='';
-      if(m.content && activeLang !== 'en'){
+      if(m.content){
         var t = await translateToEN(m.content);
-        if(t && t !== m.content) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
+        if(t) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
       }
       html+='<div class="msg user"><div><div class="msg-bubble">'+esc(m.content||'')+'</div>'+translation+'</div></div>';
     } else if(m.role==='human'){
@@ -480,13 +499,6 @@ document.getElementById('chat-inp').addEventListener('keydown',function(e){
   if(e.key==='Enter'){e.preventDefault();window.sendMsg();}
 });
 
-  window.deleteConv = async function(id) {
-  if(!confirm('Delete this conversation?')) return;
-  try {
-    const {deleteDoc} = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-    await deleteDoc(doc(db,'conversations',id));
-  } catch(e){ console.log(e); }
-}
 window.showConvList = function() {
   if(unsub){unsub();unsub=null;}
   activeId=null;
@@ -495,11 +507,11 @@ window.showConvList = function() {
 }
 
 window.showTab = function(tab) {
-  ['analytics','conversations','emails'].forEach(t=>{
+  ['analytics','conversations','emails','visitors'].forEach(t=>{
     document.getElementById('tab-'+t).style.display=t===tab?'block':'none';
   });
   document.querySelectorAll('.nav-btn').forEach((btn,i)=>{
-    btn.classList.toggle('active',['analytics','conversations','emails'][i]===tab);
+    btn.classList.toggle('active',['analytics','conversations','emails','visitors'][i]===tab);
   });
 }
 
