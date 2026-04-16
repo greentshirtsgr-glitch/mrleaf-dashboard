@@ -265,8 +265,10 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
     '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
     '<div><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
-    '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div></div>' +
-    '</div>'
+    '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div>' +
+(v.cartCount>0 ? '<div style="font-size:11px;color:#4a7c45;font-weight:600">&#128722; '+v.cartCount+' item(s) in cart</div>' : '') +
+'</div>' +
+'</div>'
   ).join('') : '<div class="empty">No visitors online right now</div>';
 });
 
