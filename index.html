@@ -113,8 +113,6 @@ body{background:#f0f4f0;min-height:100vh}
 @media(max-width:768px){
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .charts-row{grid-template-columns:1fr}
-  .nav{overflow-x:auto;padding:0 4px}
-  .nav-btn{padding:10px 12px;font-size:12px}
 }
 </style>
 </head>
@@ -145,6 +143,17 @@ body{background:#f0f4f0;min-height:100vh}
     <div class="charts-row">
       <div class="card"><div class="card-title">Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
       <div class="card"><div class="card-title">Languages</div><div class="lang-list" id="lang-chart"><div class="loading">Loading...</div></div></div>
+    </div>
+    <div class="charts-row">
+      <div class="card"><div class="card-title">Visitors per day (last 7 days)</div><div class="bar-chart" id="visitors-chart"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">&#128276; ntfy alert settings</div>
+        <div style="font-size:13px;color:#666;margin-bottom:12px">Alert me when visitor online for more than:</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="ntfy-minutes" type="number" value="3" min="1" max="60" style="width:60px;padding:6px;border:1.5px solid #c8e6c4;border-radius:8px;font-size:14px;outline:none"/>
+          <span style="font-size:13px;color:#666">minutes without chatting</span>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#aaa">Topic: gts-alerts-kostas</div>
+      </div>
     </div>
     <div class="charts-row">
       <div class="card"><div class="card-title">Peak hours</div><div class="hours-grid" id="hours-chart"></div></div>
@@ -256,20 +265,61 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   renderHandoffAlerts();
 });
 
+var allVisitors = [];
+var ntfyAlerted = {};
+
 onSnapshot(collection(db, 'visitors'), (snap) => {
   var now = Date.now();
-  var online = snap.docs.map(d=>({id:d.id,...d.data()}))
+  allVisitors = snap.docs.map(d=>({id:d.id,...d.data()}));
+  var online = allVisitors
     .filter(v=>(now-(v.lastSeen||0)) < 5*60*1000)
     .sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
+
+  // ntfy alert for long-time visitors without conversation
+  var ntfyEl = document.getElementById('ntfy-minutes');
+  var ntfyMins = ntfyEl ? parseInt(ntfyEl.value||3) : 3;
+  online.forEach(function(v) {
+    var firstSeenMs = now - (v.firstSeen||v.lastSeen||0);
+    var hasConv = allConvs.some(function(c){ return c.sessionId === v.id || c.id === v.id; });
+    if (!hasConv && firstSeenMs > ntfyMins*60*1000 && !ntfyAlerted[v.id]) {
+      ntfyAlerted[v.id] = true;
+      fetch('https://ntfy.sh/gts-alerts-kostas', {
+        method: 'POST',
+        body: 'Visitor online for '+Math.round(firstSeenMs/60000)+' min without chatting: '+(v.currentPage||'unknown page'),
+        headers: { 'Title': 'Visitor Alert', 'Priority': 'default' }
+      }).catch(function(){});
+    }
+  });
+
+  // Online Now tab
   var vl = document.getElementById('visitors-list');
-  if(!vl) return;
-  vl.innerHTML = online.length ? online.map(v=>
-    '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
-    '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
-    '<div><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
-    '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div></div>' +
-    '</div>'
-  ).join('') : '<div class="empty">No visitors online right now</div>';
+  if(vl) {
+    vl.innerHTML = online.length ? online.map(v=>
+      '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
+      '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
+      '<div><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
+      '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div>' +
+      (v.cartCount>0 ? '<div style="font-size:11px;color:#4a7c45;font-weight:600">&#128722; '+v.cartCount+' item(s) in cart</div>' : '') +
+      '</div></div>'
+    ).join('') : '<div class="empty">No visitors online right now</div>';
+  }
+
+  // Visitors per day chart
+  var days = Array.from({length:7},(_,i)=>{var d=new Date();d.setDate(d.getDate()-6+i);return d;});
+  var dayN = days.map(d=>['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()]);
+  var vcounts = days.map(function(d) {
+    var ds = d.toDateString();
+    var seen = new Set();
+    allVisitors.forEach(function(v) {
+      if (v.lastSeen && new Date(v.lastSeen).toDateString() === ds) seen.add(v.id);
+    });
+    return seen.size;
+  });
+  var vmax = Math.max(...vcounts, 1);
+  var vc = document.getElementById('visitors-chart');
+  if(vc) vc.innerHTML = vcounts.map((c,i)=>
+    '<div class="bar-wrap"><div class="bar-val">'+c+'</div><div class="bar" style="height:'+Math.max(4,c/vmax*100)+'px;background:linear-gradient(180deg,#7dd87a,#4a7c45)"></div><div class="bar-label">'+dayN[i]+'</div></div>'
+  ).join('');
 });
 
 function updateAll() {
@@ -326,8 +376,7 @@ function updateAll() {
     if(c.language)tags+='<span class="tag tag-lang">'+(LANGS[c.language]||c.language)+'</span>';
     if(c.handoffRequested&&!c.humanJoined&&!c.handoffResolved)tags+='<span class="tag tag-handoff">Handoff pending</span>';
     if(c.humanJoined)tags+='<span class="tag tag-human">You are live</span>';
-    return '<div class="'+cls+'" style="position:relative" onclick="openConv(\''+c.id+'\')">' +
-  '<button onclick="event.stopPropagation();deleteConv(\''+c.id+'\')" style="position:absolute;top:8px;right:8px;background:#fee;border:1px solid #fcc;color:#c00;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer">Delete</button>' +
+    return '<div class="'+cls+'" onclick="openConv(\''+c.id+'\')">' +
       '<div class="conv-header"><div class="conv-email">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+'</div><div class="conv-time">'+time+'</div></div>' +
       '<div class="conv-preview">'+preview+'</div><div class="conv-tags">'+tags+'</div></div>';
   }).join('');
@@ -501,14 +550,6 @@ window.useS = function(el) {
 document.getElementById('chat-inp').addEventListener('keydown',function(e){
   if(e.key==='Enter'){e.preventDefault();window.sendMsg();}
 });
-
-window.deleteConv = async function(id) {
-  if(!confirm('Delete this conversation?')) return;
-  try {
-    const {deleteDoc} = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-    await deleteDoc(doc(db,'conversations',id));
-  } catch(e){ console.log(e); }
-}
 
 window.showConvList = function() {
   if(unsub){unsub();unsub=null;}
