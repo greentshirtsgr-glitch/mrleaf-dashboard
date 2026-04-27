@@ -490,7 +490,7 @@ async function renderMsgs(msgs) {
       html+='<div class="msg system-m"><div class="msg-bubble">&mdash; '+esc(m.content)+' &mdash;</div></div>';
     } else if(m.role==='user'){
       var translation='';
-      if(m.content){
+      if(m.content && activeLang !== 'en'){
         var t = await translateToEN(m.content);
         if(t) translation='<div class="msg-translation">EN: '+esc(t)+'</div>';
       }
