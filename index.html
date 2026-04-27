@@ -132,7 +132,6 @@ body{background:#f0f4f0;min-height:100vh}
   <button class="nav-btn" onclick="showTab('conversations')">&#128172; Conversations</button>
   <button class="nav-btn" onclick="showTab('emails')">&#128231; Emails</button>
   <button class="nav-btn" onclick="showTab('visitors')">&#128065; Online Now</button>
-  <button class="nav-btn" onclick="showTab('history')">&#128203; Visitor History</button>
 </div>
 <div class="main">
   <div id="handoff-alerts"></div>
@@ -195,17 +194,6 @@ body{background:#f0f4f0;min-height:100vh}
   </div>
   <div id="tab-visitors" style="display:none">
     <div class="card"><div class="card-title">&#128065; Online Now</div><div id="visitors-list"><div class="loading">Loading...</div></div></div>
-  </div>
-  <div id="tab-history" style="display:none">
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">&#128203; Visitor History</div>
-        <input type="date" id="history-date" style="padding:8px 12px;border:1.5px solid #c8e6c4;border-radius:8px;font-size:14px;outline:none;color:#1a1a1a"/>
-        <button onclick="loadHistory()" style="padding:8px 18px;background:linear-gradient(135deg,#2d5a28,#4a7c45);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Load</button>
-        <span id="history-summary" style="font-size:13px;color:#888"></span>
-      </div>
-    </div>
-    <div id="history-list"><div class="empty">Select a date and press Load</div></div>
   </div>
 </div>
 
@@ -582,107 +570,13 @@ window.showConvList = function() {
 }
 
 window.showTab = function(tab) {
-  ['analytics','conversations','emails','visitors','history'].forEach(t=>{
+  ['analytics','conversations','emails','visitors'].forEach(t=>{
     document.getElementById('tab-'+t).style.display=t===tab?'block':'none';
   });
   document.querySelectorAll('.nav-btn').forEach((btn,i)=>{
-    btn.classList.toggle('active',['analytics','conversations','emails','visitors','history'][i]===tab);
+    btn.classList.toggle('active',['analytics','conversations','emails','visitors'][i]===tab);
   });
 }
-
-// --- VISITOR HISTORY TAB ---
-(function() {
-  var dateInp = document.getElementById('history-date');
-  if (dateInp) {
-    var today = new Date();
-    dateInp.value = today.toISOString().split('T')[0];
-  }
-})();
-
-window.loadHistory = async function() {
-  var dateInp = document.getElementById('history-date');
-  var histList = document.getElementById('history-list');
-  var summary = document.getElementById('history-summary');
-  if (!dateInp || !dateInp.value) return;
-
-  histList.innerHTML = '<div class="loading">Loading...</div>';
-  summary.textContent = '';
-
-  var selDate = new Date(dateInp.value);
-  var selDateStr = selDate.toDateString();
-
-  try {
-    var { getDocs, collection: col2 } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
-    var snap = await getDocs(col2(db, 'visitors'));
-    var visitors = snap.docs.map(d => ({id: d.id, ...d.data()}));
-
-    // Filter visitors that were active on selected date
-    var filtered = visitors.filter(function(v) {
-      if (v.lastSeen && new Date(v.lastSeen).toDateString() === selDateStr) return true;
-      if (v.pageHistory && v.pageHistory.some(function(p) {
-        return new Date(p.ts).toDateString() === selDateStr;
-      })) return true;
-      return false;
-    });
-
-    if (!filtered.length) {
-      histList.innerHTML = '<div class="empty">No visitors found for this date</div>';
-      return;
-    }
-
-    summary.textContent = filtered.length + ' visitor session(s)';
-
-    histList.innerHTML = filtered.map(function(v) {
-      // Page history for selected date only
-      var pages = (v.pageHistory || [])
-        .filter(function(p) { return new Date(p.ts).toDateString() === selDateStr; })
-        .sort(function(a,b) { return a.ts - b.ts; });
-
-      var pagesHtml = pages.length ? pages.map(function(p) {
-        var url = p.page || '';
-        var label = url.replace('https://green-tshirts.com','').replace('http://green-tshirts.com','') || '/';
-        if (label === '→ CHECKOUT') label = '🛒 → CHECKOUT';
-        var time = new Date(p.ts).toLocaleTimeString('el-GR', {hour:'2-digit',minute:'2-digit'});
-        return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f4f0">' +
-          '<span style="font-size:11px;color:#aaa;width:40px;flex-shrink:0">' + time + '</span>' +
-          '<span style="font-size:12px;color:#333;word-break:break-all">' + esc(label) + '</span></div>';
-      }).join('') : '<div style="font-size:12px;color:#aaa;padding:4px 0">No page history recorded</div>';
-
-      // Cart items
-      var cartHtml = '';
-      if (v.cartItems && v.cartItems.length > 0) {
-        cartHtml = '<div style="margin-top:10px;padding:10px;background:#f0faf0;border-radius:8px;border:1px solid #c8e6c4">' +
-          '<div style="font-size:12px;font-weight:700;color:#2d5a28;margin-bottom:6px">🛒 Cart (' + v.cartCount + ' items)</div>' +
-          v.cartItems.map(function(item) {
-            return '<div style="font-size:12px;color:#333;padding:2px 0">' +
-              esc(item.title) + ' × ' + item.quantity + ' — €' + item.price + '</div>';
-          }).join('') + '</div>';
-      }
-
-      // Find linked conversation
-      var conv = allConvs.find(function(c) { return c.id === v.id || c.sessionId === v.id; });
-      var convHtml = conv ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:2px 8px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">💬 View conversation</span></div>' : '';
-
-      var lastSeen = v.lastSeen ? new Date(v.lastSeen).toLocaleTimeString('el-GR', {hour:'2-digit',minute:'2-digit'}) : '—';
-      var checkout = (v.currentPage||'').indexOf('CHECKOUT') !== -1;
-
-      return '<div style="background:#fff;border:1.5px solid #e8f0e5;border-radius:12px;padding:16px;margin-bottom:12px' + (checkout ? ';border-left:4px solid #4a7c45' : '') + '">' +
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">' +
-        '<span style="font-size:13px;font-weight:600;color:#1a1a1a">Session: ' + esc(v.id) + '</span>' +
-        '<span style="font-size:11px;color:#aaa">Last seen: ' + lastSeen + '</span>' +
-        (checkout ? '<span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:2px 8px;border-radius:10px;font-weight:600">Reached checkout</span>' : '') +
-        (v.cartCount > 0 ? '<span style="font-size:11px;background:#fff8e6;color:#b07700;padding:2px 8px;border-radius:10px;font-weight:600">🛒 ' + v.cartCount + ' in cart</span>' : '') +
-        '</div>' +
-        '<div style="font-size:12px;font-weight:600;color:#888;margin-bottom:4px">Pages visited:</div>' +
-        pagesHtml + cartHtml + convHtml +
-        '</div>';
-    }).join('');
-
-  } catch(e) {
-    histList.innerHTML = '<div class="empty">Error loading data: ' + esc(String(e)) + '</div>';
-  }
-};
-// --- END VISITOR HISTORY TAB ---
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
