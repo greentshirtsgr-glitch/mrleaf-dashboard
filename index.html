@@ -621,6 +621,9 @@ window.loadHistory = async function() {
       return false;
     });
 
+    // Sort: most recent session at top
+    filtered.sort(function(a, b) { return (b.lastSeen || 0) - (a.lastSeen || 0); });
+
     if (!filtered.length) {
       histList.innerHTML = '<div class="empty">No visitors found for this date</div>';
       return;
