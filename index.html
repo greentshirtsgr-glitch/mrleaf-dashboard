@@ -419,7 +419,7 @@ async function translate(text, toLang) {
   if (translationCache[key]) return translationCache[key];
   try {
     var r = await fetch(PROXY, {method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({isDashboard:true, system:'Translate the following text to '+toLang+'. Return ONLY the translated text, nothing else.',messages:[{role:'user',content:text}]})});
+      body:JSON.stringify({isDashboard:true, system:'Translate the following text to the language with ISO 639-1 code "'+toLang+'". Return ONLY the translated text in that language, nothing else, no explanations.',messages:[{role:'user',content:text}]})});
     var d = await r.json();
     var result = d.content&&d.content[0]?d.content[0].text:text;
     translationCache[key] = result;
@@ -498,7 +498,12 @@ async function renderMsgs(msgs) {
     } else if(m.role==='human'){
       html+='<div class="msg human"><div class="msg-av k">K</div><div class="msg-bubble">'+esc(m.content||'')+'</div></div>';
     } else {
-      html+='<div class="msg bot"><div class="msg-av"><img src="'+AVATAR+'"/></div><div class="msg-bubble">'+esc(m.content||'')+'</div></div>';
+      var botTranslation='';
+      if(m.content && activeLang !== 'en'){
+        var bt = await translateToEN(m.content);
+        if(bt) botTranslation='<div class="msg-translation">EN: '+esc(bt)+'</div>';
+      }
+      html+='<div class="msg bot"><div class="msg-av"><img src="'+AVATAR+'"/></div><div><div class="msg-bubble">'+esc(m.content||'')+'</div>'+botTranslation+'</div></div>';
     }
   }
   if(!html) html='<div style="text-align:center;color:#aaa;padding:20px">No messages yet</div>';
