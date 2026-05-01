@@ -110,6 +110,28 @@ body{background:#f0f4f0;min-height:100vh}
 .emails-table td{padding:10px;font-size:14px;border-bottom:1px solid #f0f4f0}
 .empty{text-align:center;padding:40px;color:#aaa;font-size:14px}
 .loading{text-align:center;padding:40px;color:#4a7c45}
+
+/* Traffic source badges */
+.src-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600}
+.src-ai{background:#fff0e0;color:#c05a1a;border:1px solid #f0c8a0}
+.src-social{background:#fde6f0;color:#a02060;border:1px solid #f0c0d0}
+.src-search{background:#e0ecff;color:#1a4080;border:1px solid #b0c8f0}
+.src-email{background:#eef0f4;color:#404858;border:1px solid #c8d0d8}
+.src-referral{background:#f0e8ff;color:#5028a0;border:1px solid #d0c0f0}
+.src-direct{background:#f0f4f0;color:#666;border:1px solid #d8e0d8}
+
+/* Cart events timeline */
+.cart-events-box{margin-top:10px;padding:10px;background:#fffbe6;border-radius:8px;border:1px solid #f0e0a0}
+.cart-events-title{font-size:12px;font-weight:700;color:#806020;margin-bottom:6px}
+.cart-evt{display:flex;gap:8px;padding:3px 0;font-size:12px;border-bottom:1px dotted #f0e0a0}
+.cart-evt:last-child{border-bottom:none}
+.cart-evt-time{color:#aaa;width:42px;flex-shrink:0;font-size:11px}
+.cart-evt-icon{width:18px;flex-shrink:0;text-align:center}
+.cart-evt-add{color:#2d5a28}
+.cart-evt-remove{color:#c0501a}
+.cart-evt-update{color:#806020}
+.cart-evt-checkout{color:#1a4080;font-weight:600;background:#e0ecff;padding:2px 6px;border-radius:6px;margin-top:2px}
+
 @media(max-width:768px){
   .stats-grid{grid-template-columns:repeat(2,1fr)}
   .charts-row{grid-template-columns:1fr}
@@ -157,6 +179,10 @@ body{background:#f0f4f0;min-height:100vh}
         </div>
         <div style="margin-top:10px;font-size:12px;color:#aaa">Topic: gts-alerts-kostas</div>
       </div>
+    </div>
+    <div class="charts-row">
+      <div class="card"><div class="card-title">Traffic sources (last 7 days)</div><div class="lang-list" id="traffic-chart"><div class="loading">Loading...</div></div></div>
+      <div class="card"><div class="card-title">Top referrers</div><div class="lang-list" id="referrer-chart"><div class="loading">Loading...</div></div></div>
     </div>
     <div class="charts-row">
       <div class="card"><div class="card-title">Peak hours</div><div class="hours-grid" id="hours-chart"></div></div>
@@ -229,6 +255,32 @@ const db = getFirestore(app);
 const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
+
+// Traffic source category icons & colors
+const SRC_ICONS = {
+  ai: '&#129302;',        // robot
+  social: '&#128241;',    // mobile
+  search: '&#128269;',    // magnifier
+  email: '&#128231;',     // envelope
+  referral: '&#128279;',  // link
+  direct: '&#9000;'       // keyboard
+};
+const SRC_LABELS = {
+  ai: 'AI',
+  social: 'Social',
+  search: 'Search',
+  email: 'Email',
+  referral: 'Referral',
+  direct: 'Direct'
+};
+
+function srcBadge(category, source) {
+  var cat = category || 'direct';
+  var icon = SRC_ICONS[cat] || SRC_ICONS.direct;
+  var label = SRC_LABELS[cat] || 'Direct';
+  var detail = (source && source !== 'direct') ? ' · ' + esc(source) : '';
+  return '<span class="src-badge src-' + cat + '">' + icon + ' ' + label + detail + '</span>';
+}
 
 var allConvs = [];
 var activeId = null;
@@ -305,17 +357,19 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     }
   });
 
-  // Online Now tab
+  // Online Now tab — με traffic source badge
   var vl = document.getElementById('visitors-list');
   if(vl) {
-    vl.innerHTML = online.length ? online.map(v=>
-      '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
-      '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
-      '<div><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
-      '<div style="font-size:11px;color:#888">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+'</div>' +
-      (v.cartCount>0 ? '<div style="font-size:11px;color:#4a7c45;font-weight:600">&#128722; '+v.cartCount+' item(s) in cart</div>' : '') +
-      '</div></div>'
-    ).join('') : '<div class="empty">No visitors online right now</div>';
+    vl.innerHTML = online.length ? online.map(function(v) {
+      var srcHtml = v.trafficSource ? srcBadge(v.sourceCategory, v.trafficSource) : '';
+      return '<div style="padding:12px;border-bottom:1px solid #f0f4f0;display:flex;align-items:center;gap:10px">' +
+        '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
+        '<div style="flex:1"><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
+        '<div style="font-size:11px;color:#888;margin-top:2px">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+
+        (srcHtml ? ' &nbsp;·&nbsp; '+srcHtml : '')+'</div>' +
+        (v.cartCount>0 ? '<div style="font-size:11px;color:#4a7c45;font-weight:600;margin-top:2px">&#128722; '+v.cartCount+' item(s) in cart</div>' : '') +
+        '</div></div>';
+    }).join('') : '<div class="empty">No visitors online right now</div>';
   }
 
   // Visitors per day chart
@@ -334,6 +388,59 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
   if(vc) vc.innerHTML = vcounts.map((c,i)=>
     '<div class="bar-wrap"><div class="bar-val">'+c+'</div><div class="bar" style="height:'+Math.max(4,c/vmax*100)+'px;background:linear-gradient(180deg,#7dd87a,#4a7c45)"></div><div class="bar-label">'+dayN[i]+'</div></div>'
   ).join('');
+
+  // ============ TRAFFIC SOURCES CHART (last 7 days) ============
+  var sevenDaysAgo = now - 7*24*60*60*1000;
+  var recentVisitors = allVisitors.filter(function(v) {
+    return v.firstSeenAt && v.firstSeenAt > sevenDaysAgo;
+  });
+
+  // Aggregate by category
+  var catMap = {};
+  recentVisitors.forEach(function(v) {
+    var cat = v.sourceCategory || 'direct';
+    catMap[cat] = (catMap[cat] || 0) + 1;
+  });
+  var catTotal = recentVisitors.length || 1;
+  var catSorted = Object.entries(catMap).sort(function(a,b){return b[1]-a[1];});
+
+  var tc = document.getElementById('traffic-chart');
+  if (tc) {
+    tc.innerHTML = catSorted.length ? catSorted.map(function(entry) {
+      var cat = entry[0], count = entry[1];
+      var pct = Math.round(count/catTotal*100);
+      var icon = SRC_ICONS[cat] || SRC_ICONS.direct;
+      var label = SRC_LABELS[cat] || cat;
+      return '<div class="lang-item">' +
+        '<div class="lang-name" style="width:90px">'+icon+' '+label+'</div>' +
+        '<div class="lang-bar-wrap"><div class="lang-bar" style="width:'+pct+'%"></div></div>' +
+        '<div class="lang-pct">'+count+' ('+pct+'%)</div>' +
+        '</div>';
+    }).join('') : '<div class="empty">No traffic data yet</div>';
+  }
+
+  // Top referrers (specific domain names, excluding direct)
+  var refMap = {};
+  recentVisitors.forEach(function(v) {
+    if (v.trafficSource && v.trafficSource !== 'direct' && v.sourceCategory !== 'direct') {
+      refMap[v.trafficSource] = (refMap[v.trafficSource] || 0) + 1;
+    }
+  });
+  var refSorted = Object.entries(refMap).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+  var refTotal = refSorted.reduce(function(s,e){return s+e[1];},0) || 1;
+
+  var rc = document.getElementById('referrer-chart');
+  if (rc) {
+    rc.innerHTML = refSorted.length ? refSorted.map(function(entry) {
+      var dom = entry[0], count = entry[1];
+      var pct = Math.round(count/refTotal*100);
+      return '<div class="lang-item">' +
+        '<div class="lang-name" style="width:auto;flex:0 0 auto;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(dom)+'">'+esc(dom)+'</div>' +
+        '<div class="lang-bar-wrap"><div class="lang-bar" style="width:'+pct+'%"></div></div>' +
+        '<div class="lang-pct">'+count+'</div>' +
+        '</div>';
+    }).join('') : '<div class="empty">No referrers yet</div>';
+  }
 });
 
 function updateAll() {
@@ -595,6 +702,39 @@ window.showTab = function(tab) {
   });
 }
 
+// Helper: format cart event for timeline
+function renderCartEvents(events) {
+  if (!events || !events.length) return '';
+  var sorted = events.slice().sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+  var rows = sorted.map(function(e) {
+    var time = e.ts ? new Date(e.ts).toLocaleTimeString('el-GR', {hour:'2-digit',minute:'2-digit'}) : '-';
+    var icon = '', cls = '', text = '';
+    if (e.type === 'cart_add') {
+      icon = '&#10133;'; cls = 'cart-evt-add';
+      text = 'Added: ' + esc(e.product_title || 'Unknown') +
+        (e.variant ? ' (' + esc(e.variant) + ')' : '') +
+        ' &times; ' + (e.quantity || 1) +
+        (e.price ? ' &mdash; &euro;' + esc(e.price) : '');
+    } else if (e.type === 'cart_remove') {
+      icon = '&#10134;'; cls = 'cart-evt-remove';
+      text = 'Removed: ' + esc(e.product_title || 'Unknown') +
+        (e.variant ? ' (' + esc(e.variant) + ')' : '');
+    } else if (e.type === 'cart_update') {
+      icon = '&#128260;'; cls = 'cart-evt-update';
+      text = 'Updated: ' + esc(e.product_title || 'Unknown') +
+        ' qty ' + (e.old_quantity || '?') + ' &rarr; ' + (e.new_quantity || '?');
+    } else if (e.type === 'checkout_clicked') {
+      icon = '&#128722;'; cls = 'cart-evt-checkout';
+      text = 'Checkout clicked: &euro;' + esc(e.total || '0') +
+        ' (' + (e.items_count || 0) + ' items)';
+    }
+    return '<div class="cart-evt"><span class="cart-evt-time">'+time+'</span>' +
+      '<span class="cart-evt-icon">'+icon+'</span>' +
+      '<span class="'+cls+'">'+text+'</span></div>';
+  }).join('');
+  return '<div class="cart-events-box"><div class="cart-events-title">&#128722; Cart Activity</div>' + rows + '</div>';
+}
+
 // --- VISITOR HISTORY TAB ---
 window.loadHistory = async function() {
   var dateInp = document.getElementById('history-date');
@@ -653,7 +793,7 @@ window.loadHistory = async function() {
       var cartHtml = '';
       if (v.cartItems && v.cartItems.length > 0) {
         cartHtml = '<div style="margin-top:10px;padding:10px;background:#f0faf0;border-radius:8px;border:1px solid #c8e6c4">' +
-          '<div style="font-size:12px;font-weight:700;color:#2d5a28;margin-bottom:6px">&#128722; Cart (' + v.cartCount + ' items)</div>' +
+          '<div style="font-size:12px;font-weight:700;color:#2d5a28;margin-bottom:6px">&#128722; Current Cart (' + v.cartCount + ' items)</div>' +
           v.cartItems.map(function(item) {
             return '<div style="font-size:12px;color:#333;padding:2px 0">' +
               esc(item.title) + ' &times; ' + item.quantity + ' &mdash; &euro;' + item.price + '</div>';
@@ -661,20 +801,48 @@ window.loadHistory = async function() {
       }
 
       var conv = allConvs.find(function(c) { return c.id === v.id || c.sessionId === v.id; });
+
+      // Cart events from conversation document
+      var cartEventsHtml = '';
+      if (conv && conv.cartEvents && conv.cartEvents.length) {
+        var dayEvents = conv.cartEvents.filter(function(e) {
+          return e.ts && new Date(e.ts).toDateString() === selDateStr;
+        });
+        if (dayEvents.length) cartEventsHtml = renderCartEvents(dayEvents);
+      }
+
       var convHtml = conv ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:3px 10px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">&#128172; View conversation</span></div>' : '';
 
       var lastSeen = v.lastSeen ? new Date(v.lastSeen).toLocaleTimeString('el-GR', {hour:'2-digit',minute:'2-digit'}) : '-';
       var checkout = (v.currentPage||'').indexOf('CHECKOUT') !== -1;
 
+      // Traffic source info
+      var srcHtml = v.trafficSource ? srcBadge(v.sourceCategory, v.trafficSource) : '';
+      var landingHtml = '';
+      if (v.landingPage) {
+        var landing = v.landingPage.replace('https://green-tshirts.com','').replace('http://green-tshirts.com','') || '/';
+        landingHtml = '<div style="font-size:11px;color:#888;margin-top:6px">Landing: <span style="color:#1a4080">'+esc(landing)+'</span></div>';
+      }
+      var utmHtml = '';
+      if (v.utmCampaign || v.utmSource || v.utmMedium) {
+        var utmParts = [];
+        if (v.utmSource) utmParts.push('source: '+esc(v.utmSource));
+        if (v.utmMedium) utmParts.push('medium: '+esc(v.utmMedium));
+        if (v.utmCampaign) utmParts.push('campaign: '+esc(v.utmCampaign));
+        utmHtml = '<div style="font-size:11px;color:#888;margin-top:4px">UTM: '+utmParts.join(' · ')+'</div>';
+      }
+
       return '<div style="background:#fff;border:1.5px solid #e8f0e5;border-radius:12px;padding:14px;margin-bottom:12px' + (checkout ? ';border-left:4px solid #4a7c45' : '') + '">' +
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:center">' +
         '<span style="font-size:12px;font-weight:600;color:#1a1a1a;word-break:break-all">' + esc(v.id) + '</span>' +
         '<span style="font-size:11px;color:#aaa">' + lastSeen + '</span>' +
+        (srcHtml ? srcHtml : '') +
         (checkout ? '<span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:2px 8px;border-radius:10px;font-weight:600">Checkout</span>' : '') +
         (v.cartCount > 0 ? '<span style="font-size:11px;background:#fff8e6;color:#b07700;padding:2px 8px;border-radius:10px;font-weight:600">&#128722; ' + v.cartCount + '</span>' : '') +
         '</div>' +
-        '<div style="font-size:12px;font-weight:600;color:#888;margin-bottom:4px">Pages:</div>' +
-        pagesHtml + cartHtml + convHtml +
+        landingHtml + utmHtml +
+        '<div style="font-size:12px;font-weight:600;color:#888;margin:10px 0 4px">Pages:</div>' +
+        pagesHtml + cartHtml + cartEventsHtml + convHtml +
         '</div>';
     }).join('');
 
