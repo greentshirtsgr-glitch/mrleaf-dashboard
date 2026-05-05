@@ -17,12 +17,14 @@ body{background:#f0f4f0;min-height:100vh}
 .topbar-logo img{width:100%;height:100%;object-fit:cover}
 .topbar-title{color:#fff;font-size:18px;font-weight:700}
 .topbar-sub{color:rgba(255,255,255,0.65);font-size:12px}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .topbar-status{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,0.8);font-size:13px}
 .status-dot{width:8px;height:8px;border-radius:50%;background:#7dd87a;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 .notif-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer}
 .notif-btn.enabled{background:#7dd87a;color:#1a1a1a;border-color:#7dd87a}
+.admin-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer}
+.admin-btn.enabled{background:#f0c040;color:#1a1a1a;border-color:#f0c040}
 .nav{background:#fff;border-bottom:1px solid #e0e8dc;display:flex;padding:0 24px;gap:4px}
 .nav-btn{padding:12px 20px;border:none;background:none;font-size:14px;font-weight:500;color:#666;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s}
 .nav-btn:hover{color:#2d5a28}
@@ -145,6 +147,7 @@ body{background:#f0f4f0;min-height:100vh}
   <div class="topbar-logo"><img src="https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216"/></div>
   <div><div class="topbar-title">Mr.Leaf Dashboard</div><div class="topbar-sub">Green T-Shirts AI Assistant</div></div>
   <div class="topbar-right">
+    <button class="admin-btn" id="admin-btn" onclick="toggleAdmin()" title="When ON, this device's actions on green-tshirts.com will not be tracked">&#128274; Admin: OFF</button>
     <button class="notif-btn" id="notif-btn" onclick="requestNotifications()">&#128276; Enable Notifications</button>
     <div class="topbar-status"><div class="status-dot"></div>Live</div>
   </div>
@@ -256,39 +259,64 @@ const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
 
-// Traffic source category icons & colors
 const SRC_ICONS = {
-  ai: '&#129302;',        // robot
-  social: '&#128241;',    // mobile
-  search: '&#128269;',    // magnifier
-  email: '&#128231;',     // envelope
-  referral: '&#128279;',  // link
-  direct: '&#9000;'       // keyboard
+  ai: '&#129302;', social: '&#128241;', search: '&#128269;',
+  email: '&#128231;', referral: '&#128279;', direct: '&#9000;'
 };
 const SRC_LABELS = {
-  ai: 'AI',
-  social: 'Social',
-  search: 'Search',
-  email: 'Email',
-  referral: 'Referral',
-  direct: 'Direct'
+  ai: 'AI', social: 'Social', search: 'Search',
+  email: 'Email', referral: 'Referral', direct: 'Direct'
 };
 
 function srcBadge(category, source) {
   var cat = category || 'direct';
   var icon = SRC_ICONS[cat] || SRC_ICONS.direct;
   var label = SRC_LABELS[cat] || 'Direct';
-  var detail = (source && source !== 'direct') ? ' · ' + esc(source) : '';
+  var detail = (source && source !== 'direct') ? ' \u00b7 ' + esc(source) : '';
   return '<span class="src-badge src-' + cat + '">' + icon + ' ' + label + detail + '</span>';
 }
 
 var allConvs = [];
+var allCartEvents = []; // ΝΕΟ: cart events από ξεχωριστή collection
 var activeId = null;
 var activeLang = 'en';
 var unsub = null;
 var isJoined = false;
 var notifEnabled = false;
 var translationCache = {};
+
+// ============ ADMIN BUTTON ============
+// Note: το dashboard δεν τρέχει στο green-tshirts.com, άρα το localStorage εδώ
+// δεν επηρεάζει το widget. Το admin flag πρέπει να μπει στο shop domain.
+// Λύση: κατευθύνουμε τον Kostas στο green-tshirts.com με ?gts_admin=1
+function updateAdminButton() {
+  var btn = document.getElementById('admin-btn');
+  if (!btn) return;
+  // Έλεγχος αν υπάρχει flag — διαβάζουμε από session memory (αρκεί για UI)
+  var on = localStorage.getItem('gts_admin_dashboard') === 'true';
+  if (on) {
+    btn.classList.add('enabled');
+    btn.innerHTML = '&#128275; Admin: ON';
+  } else {
+    btn.classList.remove('enabled');
+    btn.innerHTML = '&#128274; Admin: OFF';
+  }
+}
+
+window.toggleAdmin = function() {
+  var on = localStorage.getItem('gts_admin_dashboard') === 'true';
+  if (on) {
+    localStorage.removeItem('gts_admin_dashboard');
+    alert('Admin mode OFF.\n\nTo also remove the flag from your browsing on green-tshirts.com, visit:\n\nhttps://green-tshirts.com/?gts_admin=0\n\nor open browser console there and run:\nlocalStorage.removeItem("gts_admin")');
+  } else {
+    localStorage.setItem('gts_admin_dashboard', 'true');
+    alert('Admin mode ON for this dashboard.\n\nIMPORTANT: To stop tracking your visits on green-tshirts.com, you must also activate it there.\n\nVisit ONCE this URL in your normal browser:\n\nhttps://green-tshirts.com/?gts_admin=1\n\nAfter that, all your visits to green-tshirts.com will be excluded from tracking until you clear localStorage.');
+  }
+  updateAdminButton();
+};
+
+updateAdminButton();
+// ============ END ADMIN BUTTON ============
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(e) { console.log('SW error', e); });
@@ -331,6 +359,11 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   renderHandoffAlerts();
 });
 
+// ΝΕΟ: listener για cart_events collection
+onSnapshot(collection(db, 'cart_events'), (snap) => {
+  allCartEvents = snap.docs.map(d => ({id: d.id, ...d.data()}));
+});
+
 var allVisitors = [];
 var ntfyAlerted = {};
 
@@ -341,7 +374,6 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     .filter(v=>(now-(v.lastSeen||0)) < 5*60*1000)
     .sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
 
-  // ntfy alert for long-time visitors without conversation
   var ntfyEl = document.getElementById('ntfy-minutes');
   var ntfyMins = ntfyEl ? parseInt(ntfyEl.value||3) : 3;
   online.forEach(function(v) {
@@ -357,7 +389,6 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     }
   });
 
-  // Online Now tab — με traffic source badge
   var vl = document.getElementById('visitors-list');
   if(vl) {
     vl.innerHTML = online.length ? online.map(function(v) {
@@ -366,13 +397,12 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
         '<div style="width:8px;height:8px;border-radius:50%;background:#7dd87a;flex-shrink:0"></div>' +
         '<div style="flex:1"><div style="font-size:13px;font-weight:500;color:#1a1a1a">'+esc(v.currentPage||'Unknown page')+'</div>' +
         '<div style="font-size:11px;color:#888;margin-top:2px">Last seen: '+new Date(v.lastSeen).toLocaleTimeString('el-GR')+
-        (srcHtml ? ' &nbsp;·&nbsp; '+srcHtml : '')+'</div>' +
+        (srcHtml ? ' &nbsp;\u00b7&nbsp; '+srcHtml : '')+'</div>' +
         (v.cartCount>0 ? '<div style="font-size:11px;color:#4a7c45;font-weight:600;margin-top:2px">&#128722; '+v.cartCount+' item(s) in cart</div>' : '') +
         '</div></div>';
     }).join('') : '<div class="empty">No visitors online right now</div>';
   }
 
-  // Visitors per day chart
   var days = Array.from({length:7},(_,i)=>{var d=new Date();d.setDate(d.getDate()-6+i);return d;});
   var dayN = days.map(d=>['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()]);
   var vcounts = days.map(function(d) {
@@ -389,13 +419,11 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     '<div class="bar-wrap"><div class="bar-val">'+c+'</div><div class="bar" style="height:'+Math.max(4,c/vmax*100)+'px;background:linear-gradient(180deg,#7dd87a,#4a7c45)"></div><div class="bar-label">'+dayN[i]+'</div></div>'
   ).join('');
 
-  // ============ TRAFFIC SOURCES CHART (last 7 days) ============
   var sevenDaysAgo = now - 7*24*60*60*1000;
   var recentVisitors = allVisitors.filter(function(v) {
     return v.firstSeenAt && v.firstSeenAt > sevenDaysAgo;
   });
 
-  // Aggregate by category
   var catMap = {};
   recentVisitors.forEach(function(v) {
     var cat = v.sourceCategory || 'direct';
@@ -419,7 +447,6 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     }).join('') : '<div class="empty">No traffic data yet</div>';
   }
 
-  // Top referrers (specific domain names, excluding direct)
   var refMap = {};
   recentVisitors.forEach(function(v) {
     if (v.trafficSource && v.trafficSource !== 'direct' && v.sourceCategory !== 'direct') {
@@ -571,7 +598,6 @@ window.openConv = async function(id) {
     isJoined=data.humanJoined||false;
     updateBtns(data);
 
-    // Ανανέωσε τη γλώσσα αν άλλαξε ο πελάτης
     if(data.language && data.language !== activeLang) {
       activeLang = data.language;
       document.getElementById('cpanel-lang').textContent='Language: '+(LANGS[activeLang]||activeLang);
@@ -702,7 +728,6 @@ window.showTab = function(tab) {
   });
 }
 
-// Helper: format cart event for timeline
 function renderCartEvents(events) {
   if (!events || !events.length) return '';
   var sorted = events.slice().sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
@@ -735,14 +760,12 @@ function renderCartEvents(events) {
   return '<div class="cart-events-box"><div class="cart-events-title">&#128722; Cart Activity</div>' + rows + '</div>';
 }
 
-// --- VISITOR HISTORY TAB ---
 window.loadHistory = async function() {
   var dateInp = document.getElementById('history-date');
   var histList = document.getElementById('history-list');
   var summary = document.getElementById('history-summary');
   if (!dateInp) return;
 
-  // Auto-set today if empty
   if (!dateInp.value) {
     try { dateInp.value = new Date().toISOString().split('T')[0]; } catch(e) {}
   }
@@ -758,6 +781,13 @@ window.loadHistory = async function() {
     var snap = await getDocs(collection(db, 'visitors'));
     var visitors = snap.docs.map(d => ({id: d.id, ...d.data()}));
 
+    // ΝΕΟ: Φόρτωση cart events από ξεχωριστή collection
+    var cartSnap = await getDocs(collection(db, 'cart_events'));
+    var cartEventsMap = {};
+    cartSnap.docs.forEach(function(d) {
+      cartEventsMap[d.id] = (d.data().events) || [];
+    });
+
     var filtered = visitors.filter(function(v) {
       if (v.lastSeen && new Date(v.lastSeen).toDateString() === selDateStr) return true;
       if (v.pageHistory && v.pageHistory.some(function(p) {
@@ -766,7 +796,6 @@ window.loadHistory = async function() {
       return false;
     });
 
-    // Sort: most recent session at top
     filtered.sort(function(a, b) { return (b.lastSeen || 0) - (a.lastSeen || 0); });
 
     if (!filtered.length) {
@@ -800,23 +829,25 @@ window.loadHistory = async function() {
           }).join('') + '</div>';
       }
 
-      var conv = allConvs.find(function(c) { return c.id === v.id || c.sessionId === v.id; });
-
-      // Cart events from conversation document
+      // ΝΕΟ: cart events από cart_events collection
       var cartEventsHtml = '';
-      if (conv && conv.cartEvents && conv.cartEvents.length) {
-        var dayEvents = conv.cartEvents.filter(function(e) {
+      var sessionCartEvents = cartEventsMap[v.id] || [];
+      if (sessionCartEvents.length) {
+        var dayEvents = sessionCartEvents.filter(function(e) {
           return e.ts && new Date(e.ts).toDateString() === selDateStr;
         });
         if (dayEvents.length) cartEventsHtml = renderCartEvents(dayEvents);
       }
 
-      var convHtml = conv ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:3px 10px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">&#128172; View conversation</span></div>' : '';
+      var conv = allConvs.find(function(c) { return c.id === v.id || c.sessionId === v.id; });
+      // Δείχνουμε link σε συνομιλία ΜΟΝΟ αν έχει πραγματικά messages (όχι ψεύτικα cart-only docs)
+      var convHtml = (conv && conv.messages && conv.messages.length > 0)
+        ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:3px 10px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">&#128172; View conversation</span></div>'
+        : '';
 
       var lastSeen = v.lastSeen ? new Date(v.lastSeen).toLocaleTimeString('el-GR', {hour:'2-digit',minute:'2-digit'}) : '-';
       var checkout = (v.currentPage||'').indexOf('CHECKOUT') !== -1;
 
-      // Traffic source info
       var srcHtml = v.trafficSource ? srcBadge(v.sourceCategory, v.trafficSource) : '';
       var landingHtml = '';
       if (v.landingPage) {
@@ -829,7 +860,7 @@ window.loadHistory = async function() {
         if (v.utmSource) utmParts.push('source: '+esc(v.utmSource));
         if (v.utmMedium) utmParts.push('medium: '+esc(v.utmMedium));
         if (v.utmCampaign) utmParts.push('campaign: '+esc(v.utmCampaign));
-        utmHtml = '<div style="font-size:11px;color:#888;margin-top:4px">UTM: '+utmParts.join(' · ')+'</div>';
+        utmHtml = '<div style="font-size:11px;color:#888;margin-top:4px">UTM: '+utmParts.join(' \u00b7 ')+'</div>';
       }
 
       return '<div style="background:#fff;border:1.5px solid #e8f0e5;border-radius:12px;padding:14px;margin-bottom:12px' + (checkout ? ';border-left:4px solid #4a7c45' : '') + '">' +
@@ -850,7 +881,6 @@ window.loadHistory = async function() {
     histList.innerHTML = '<div class="empty">Error: ' + esc(String(e.message||e)) + '</div>';
   }
 };
-// --- END VISITOR HISTORY TAB ---
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 </script>
