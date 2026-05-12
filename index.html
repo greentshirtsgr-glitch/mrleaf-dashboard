@@ -277,7 +277,7 @@ function srcBadge(category, source) {
 }
 
 var allConvs = [];
-var allCartEvents = []; // ΝΕΟ: cart events από ξεχωριστή collection
+var allCartEvents = []; // cart events από ξεχωριστή collection
 var activeId = null;
 var activeLang = 'en';
 var unsub = null;
@@ -286,13 +286,9 @@ var notifEnabled = false;
 var translationCache = {};
 
 // ============ ADMIN BUTTON ============
-// Note: το dashboard δεν τρέχει στο green-tshirts.com, άρα το localStorage εδώ
-// δεν επηρεάζει το widget. Το admin flag πρέπει να μπει στο shop domain.
-// Λύση: κατευθύνουμε τον Kostas στο green-tshirts.com με ?gts_admin=1
 function updateAdminButton() {
   var btn = document.getElementById('admin-btn');
   if (!btn) return;
-  // Έλεγχος αν υπάρχει flag — διαβάζουμε από session memory (αρκεί για UI)
   var on = localStorage.getItem('gts_admin_dashboard') === 'true';
   if (on) {
     btn.classList.add('enabled');
@@ -359,13 +355,51 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   renderHandoffAlerts();
 });
 
-// ΝΕΟ: listener για cart_events collection
 onSnapshot(collection(db, 'cart_events'), (snap) => {
   allCartEvents = snap.docs.map(d => ({id: d.id, ...d.data()}));
 });
 
 var allVisitors = [];
 var ntfyAlerted = {};
+
+// ============ FIX: helper για ασφαλές matching visitor -> conversation ============
+// Επιστρέφει conversation ΜΟΝΟ αν:
+//  1) το sessionId ταυτίζεται ακριβώς με το visitor.id (όχι matching σε falsy values)
+//  2) η συνομιλία έχει τουλάχιστον ένα μήνυμα από τον πελάτη (role: 'user')
+//  3) τουλάχιστον ένα μήνυμα ή το updatedAt είναι μέσα στην ίδια μέρα με τον visitor session
+// Αυτό αποτρέπει να βγαίνει "View conversation" όταν το ίδιο sessionId (localStorage)
+// αντιστοιχεί σε παλιά συνομιλία προηγούμενης επίσκεψης.
+function findMatchingConv(visitor, dateStr) {
+  if (!visitor || !visitor.id) return null;
+  var vid = visitor.id;
+  for (var i = 0; i < allConvs.length; i++) {
+    var c = allConvs[i];
+    // Αυστηρό matching: είτε explicit sessionId field, είτε doc id — αλλά μόνο αν δεν είναι κενά
+    var matches = false;
+    if (c.sessionId && c.sessionId === vid) matches = true;
+    else if (!c.sessionId && c.id === vid) matches = true; // backwards compat για παλιά docs χωρίς sessionId
+    if (!matches) continue;
+
+    // Πρέπει να έχει τουλάχιστον ένα μήνυμα από πελάτη (όχι μόνο auto-greetings ή system)
+    var msgs = c.messages || [];
+    var hasUserMsg = msgs.some(function(m){ return m.role === 'user' && m.content && String(m.content).trim().length > 0; });
+    if (!hasUserMsg) continue;
+
+    // Αν δόθηκε dateStr, η συνομιλία πρέπει να έχει δραστηριότητα εκείνη τη μέρα
+    if (dateStr) {
+      var hasMsgOnDate = msgs.some(function(m){
+        return m.ts && new Date(m.ts).toDateString() === dateStr;
+      });
+      var updatedOnDate = c.updatedAt && new Date(c.updatedAt).toDateString() === dateStr;
+      var startedOnDate = c.startedAt && new Date(c.startedAt).toDateString() === dateStr;
+      if (!hasMsgOnDate && !updatedOnDate && !startedOnDate) continue;
+    }
+
+    return c;
+  }
+  return null;
+}
+// ============ END FIX ============
 
 onSnapshot(collection(db, 'visitors'), (snap) => {
   var now = Date.now();
@@ -378,7 +412,9 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
   var ntfyMins = ntfyEl ? parseInt(ntfyEl.value||3) : 3;
   online.forEach(function(v) {
     var firstSeenMs = now - (v.firstSeen||v.lastSeen||0);
-    var hasConv = allConvs.some(function(c){ return c.sessionId === v.id || c.id === v.id; });
+    // FIX: χρήση findMatchingConv αντί για loose matching
+    var todayStr = new Date().toDateString();
+    var hasConv = !!findMatchingConv(v, todayStr);
     if (!hasConv && firstSeenMs > ntfyMins*60*1000 && !ntfyAlerted[v.id]) {
       ntfyAlerted[v.id] = true;
       fetch('https://ntfy.sh/gts-alerts-kostas', {
@@ -781,7 +817,6 @@ window.loadHistory = async function() {
     var snap = await getDocs(collection(db, 'visitors'));
     var visitors = snap.docs.map(d => ({id: d.id, ...d.data()}));
 
-    // ΝΕΟ: Φόρτωση cart events από ξεχωριστή collection
     var cartSnap = await getDocs(collection(db, 'cart_events'));
     var cartEventsMap = {};
     cartSnap.docs.forEach(function(d) {
@@ -829,7 +864,6 @@ window.loadHistory = async function() {
           }).join('') + '</div>';
       }
 
-      // ΝΕΟ: cart events από cart_events collection
       var cartEventsHtml = '';
       var sessionCartEvents = cartEventsMap[v.id] || [];
       if (sessionCartEvents.length) {
@@ -839,9 +873,9 @@ window.loadHistory = async function() {
         if (dayEvents.length) cartEventsHtml = renderCartEvents(dayEvents);
       }
 
-      var conv = allConvs.find(function(c) { return c.id === v.id || c.sessionId === v.id; });
-      // Δείχνουμε link σε συνομιλία ΜΟΝΟ αν έχει πραγματικά messages (όχι ψεύτικα cart-only docs)
-      var convHtml = (conv && conv.messages && conv.messages.length > 0)
+      // FIX: αυστηρό matching visitor -> conversation (μόνο για ΑΥΤΗ τη μέρα, με πραγματικά user messages)
+      var conv = findMatchingConv(v, selDateStr);
+      var convHtml = conv
         ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:3px 10px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">&#128172; View conversation</span></div>'
         : '';
 
