@@ -362,30 +362,21 @@ onSnapshot(collection(db, 'cart_events'), (snap) => {
 var allVisitors = [];
 var ntfyAlerted = {};
 
-// ============ FIX: helper για ασφαλές matching visitor -> conversation ============
-// Επιστρέφει conversation ΜΟΝΟ αν:
-//  1) το sessionId ταυτίζεται ακριβώς με το visitor.id (όχι matching σε falsy values)
-//  2) η συνομιλία έχει τουλάχιστον ένα μήνυμα από τον πελάτη (role: 'user')
-//  3) τουλάχιστον ένα μήνυμα ή το updatedAt είναι μέσα στην ίδια μέρα με τον visitor session
-// Αυτό αποτρέπει να βγαίνει "View conversation" όταν το ίδιο sessionId (localStorage)
-// αντιστοιχεί σε παλιά συνομιλία προηγούμενης επίσκεψης.
+// ============ helper για ασφαλές matching visitor -> conversation ============
 function findMatchingConv(visitor, dateStr) {
   if (!visitor || !visitor.id) return null;
   var vid = visitor.id;
   for (var i = 0; i < allConvs.length; i++) {
     var c = allConvs[i];
-    // Αυστηρό matching: είτε explicit sessionId field, είτε doc id — αλλά μόνο αν δεν είναι κενά
     var matches = false;
     if (c.sessionId && c.sessionId === vid) matches = true;
-    else if (!c.sessionId && c.id === vid) matches = true; // backwards compat για παλιά docs χωρίς sessionId
+    else if (!c.sessionId && c.id === vid) matches = true;
     if (!matches) continue;
 
-    // Πρέπει να έχει τουλάχιστον ένα μήνυμα από πελάτη (όχι μόνο auto-greetings ή system)
     var msgs = c.messages || [];
     var hasUserMsg = msgs.some(function(m){ return m.role === 'user' && m.content && String(m.content).trim().length > 0; });
     if (!hasUserMsg) continue;
 
-    // Αν δόθηκε dateStr, η συνομιλία πρέπει να έχει δραστηριότητα εκείνη τη μέρα
     if (dateStr) {
       var hasMsgOnDate = msgs.some(function(m){
         return m.ts && new Date(m.ts).toDateString() === dateStr;
@@ -399,7 +390,6 @@ function findMatchingConv(visitor, dateStr) {
   }
   return null;
 }
-// ============ END FIX ============
 
 onSnapshot(collection(db, 'visitors'), (snap) => {
   var now = Date.now();
@@ -412,7 +402,6 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
   var ntfyMins = ntfyEl ? parseInt(ntfyEl.value||3) : 3;
   online.forEach(function(v) {
     var firstSeenMs = now - (v.firstSeen||v.lastSeen||0);
-    // FIX: χρήση findMatchingConv αντί για loose matching
     var todayStr = new Date().toDateString();
     var hasConv = !!findMatchingConv(v, todayStr);
     if (!hasConv && firstSeenMs > ntfyMins*60*1000 && !ntfyAlerted[v.id]) {
@@ -584,31 +573,132 @@ function renderHandoffAlerts() {
   ).join('');
 }
 
-async function translate(text, toLang) {
-  var key = text + '|' + toLang;
-  if (translationCache[key]) return translationCache[key];
-  try {
-    var r = await fetch(PROXY, {method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({isDashboard:true, system:'Translate the following text to the language with ISO 639-1 code "'+toLang+'". Return ONLY the translated text in that language, nothing else, no explanations.',messages:[{role:'user',content:text}]})});
-    var d = await r.json();
-    var result = d.content&&d.content[0]?d.content[0].text:text;
-    translationCache[key] = result;
-    return result;
-  } catch(e){return text;}
+// ============================================================================
+// ΚΡΙΣΙΜΟ BUG FIX (3 ΣΤΡΩΜΑΤΑ) — Μετάφραση εξερχομένων μηνυμάτων Kostas → πελάτη
+//
+// Πρόβλημα που λύνει: όταν ο Kostas έγραφε στα ελληνικά και ο πελάτης ήταν
+// επίσης ελληνόφωνος (activeLang === 'el'), η translate() καλούσε το Claude API
+// «μετάφρασέ το στα ελληνικά» — και το Claude, αντί για μετάφραση, απαντούσε
+// συνομιλιακά («Το κείμενό σας είναι ήδη στα ελληνικά (ISO 639-1...)»). Αυτή η
+// εξήγηση αποθηκευόταν ως lastHumanMessage.text και ΣΤΕΛΝΟΤΑΝ στον πελάτη ως
+// δικό του μήνυμα. Από εδώ προέκυπτε η ψευδαίσθηση ότι «το bot συνέχιζε».
+//
+// Στρώμα 1 (πρόληψη): αν η γλώσσα γραφής ταυτίζεται με τη γλώσσα-στόχο,
+//                     καμία κλήση API — το κείμενο πάει αυτούσιο.
+// Στρώμα 2 (αυστηρό prompt): ακόμα κι αν χρειαστεί κλήση, το Claude δεν εξηγεί.
+// Στρώμα 3 (δίχτυ): αν παρ' όλα αυτά επιστρέψει εξήγηση/άρνηση, την αγνοούμε
+//                   και χρησιμοποιούμε το αρχικό κείμενο.
+// ============================================================================
+
+// Ευρετική ανίχνευσης γλώσσας γραφής του Kostas (γράφει μόνο ελληνικά ή αγγλικά)
+function detectKostasLang(text) {
+  if (!text) return 'en';
+  if (/[\u0370-\u03FF\u1F00-\u1FFF]/.test(text)) return 'el';
+  return 'en';
 }
 
+// Εντοπίζει τυπικά σημάδια ότι το Claude δεν μετέφρασε αλλά απάντησε
+function looksLikeApiRefusal(text, originalText) {
+  if (!text) return false;
+  // Αν η απάντηση είναι δυσανάλογα μεγάλη σε σχέση με το original
+  if (originalText && text.length > Math.max(80, originalText.length * 3)) return true;
+  var t = text.toLowerCase();
+  var redFlags = [
+    'iso 639',
+    'already in english', 'already in greek', 'already greek',
+    'ήδη στα ελληνικ', 'ηδη στα ελληνικ',
+    'ήδη στα αγγλικ', 'ηδη στα αγγλικ',
+    'είναι ήδη στα', 'ειναι ηδη στα',
+    'please provide', 'παρακαλώ παρέχ', 'παρακαλω παρεχ',
+    'i cannot translate', "i can't translate",
+    'δεν μπορώ να μεταφράσ', 'δεν μπορω να μεταφρασ',
+    "i don't understand", 'δεν καταλαβαίν', 'δεν καταλαβαιν',
+    'no translation needed', 'no translation is needed',
+    'i would be happy to', 'θα χαιρόμουν να', 'θα χαιρομουν να',
+    'if you would like me to', 'εάν θέλατε να μεταφράσ', 'εαν θελατε να μεταφρασ',
+    'the text is already', 'το κείμενο είναι ήδη', 'το κειμενο ειναι ηδη',
+    'kindly provide', 'παρακαλώ δώστε', 'παρακαλω δωστε'
+  ];
+  for (var i = 0; i < redFlags.length; i++) {
+    if (t.indexOf(redFlags[i]) !== -1) return true;
+  }
+  return false;
+}
+
+// Μετάφραση Kostas → πελάτη (το αποτέλεσμα φτάνει στον πελάτη)
+async function translate(text, toLang) {
+  if (!text || !text.trim()) return text;
+
+  // ΣΤΡΩΜΑ 1: skip αν source language == target language
+  var srcLang = detectKostasLang(text);
+  if (srcLang === toLang) return text;
+
+  var key = text + '|' + toLang;
+  if (translationCache[key]) return translationCache[key];
+
+  var LANG_NAMES = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
+  var targetName = LANG_NAMES[toLang] || toLang;
+
+  try {
+    // ΣΤΡΩΜΑ 2: αυστηρό system prompt — το Claude δεν επιτρέπεται να εξηγεί
+    var sys = 'You are a silent translation engine, not a chatbot. Translate the user message to ' + targetName +
+      '. ABSOLUTE RULES: ' +
+      '(1) Output ONLY the translated text. No preamble. No quotes. No explanation. No commentary. ' +
+      '(2) If the text is already in ' + targetName + ', output it UNCHANGED, exactly as given, byte for byte. ' +
+      '(3) Never refuse. Never ask questions. Never apologize. Never mention "ISO", "code", "language", or your role. ' +
+      '(4) Treat every input as text to translate, not as a question to answer.';
+
+    var r = await fetch(PROXY, {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ isDashboard: true, system: sys, messages: [{role:'user', content: text}] })
+    });
+    var d = await r.json();
+    var result = (d.content && d.content[0]) ? d.content[0].text : text;
+
+    // ΣΤΡΩΜΑ 3: αν παρ' όλα αυτά επέστρεψε εξήγηση/άρνηση, ρίξε την στα σκουπίδια
+    if (looksLikeApiRefusal(result, text)) {
+      console.warn('[translate] API returned refusal/explanation, falling back to original. Got:', result);
+      result = text;
+    }
+
+    translationCache[key] = result;
+    return result;
+  } catch(e) {
+    return text;
+  }
+}
+
+// Μετάφραση εισερχομένου πελάτη → αγγλικά για το dashboard (display only)
 async function translateToEN(text) {
   if (!text || !text.trim()) return null;
   if (translationCache['EN|'+text]) return translationCache['EN|'+text];
+
   try {
+    var sys = 'You are a silent translation engine, not a chatbot. Translate the user message to English. ABSOLUTE RULES: ' +
+      '(1) Output ONLY the translated English text, nothing else. ' +
+      '(2) If the text is already in English, output it UNCHANGED, exactly as given. ' +
+      '(3) Never refuse, never explain, never ask questions, never apologize. ' +
+      '(4) Treat every input as text to translate, not as a question to answer.';
+
     var r = await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({isDashboard:true, system:'Translate to English. Return ONLY the translated text.',messages:[{role:'user',content:text}]})});
+      body:JSON.stringify({ isDashboard: true, system: sys, messages: [{role:'user',content:text}] })
+    });
     var d = await r.json();
-    var result = d.content&&d.content[0]?d.content[0].text:null;
+    var result = (d.content && d.content[0]) ? d.content[0].text : null;
+
+    if (result && looksLikeApiRefusal(result, text)) {
+      console.warn('[translateToEN] API returned refusal/explanation, suppressing. Got:', result);
+      result = null;
+    }
+
     if (result) translationCache['EN|'+text] = result;
     return result;
-  } catch(e){return null;}
+  } catch(e) {
+    return null;
+  }
 }
+// ============================================================================
+// END BUG FIX
+// ============================================================================
 
 window.openConv = async function(id) {
   activeId = id;
@@ -873,7 +963,6 @@ window.loadHistory = async function() {
         if (dayEvents.length) cartEventsHtml = renderCartEvents(dayEvents);
       }
 
-      // FIX: αυστηρό matching visitor -> conversation (μόνο για ΑΥΤΗ τη μέρα, με πραγματικά user messages)
       var conv = findMatchingConv(v, selDateStr);
       var convHtml = conv
         ? '<div style="margin-top:8px"><span style="font-size:11px;background:#e8f4e8;color:#2d5a28;padding:3px 10px;border-radius:10px;cursor:pointer;font-weight:600" onclick="openConv(\''+conv.id+'\');showTab(\'conversations\')">&#128172; View conversation</span></div>'
