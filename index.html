@@ -30,7 +30,7 @@ body{background:#f0f4f0;min-height:100vh}
 .nav-btn:hover{color:#2d5a28}
 .nav-btn.active{color:#2d5a28;border-bottom-color:#2d5a28;font-weight:600}
 .main{max-width:1200px;margin:0 auto;padding:24px}
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:24px}
 .stat-card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 1px 6px rgba(0,0,0,0.06);border:1px solid #e8f0e5}
 .stat-label{font-size:12px;color:#888;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
 .stat-value{font-size:32px;font-weight:700;color:#1a1a1a;margin:6px 0}
@@ -79,6 +79,7 @@ body{background:#f0f4f0;min-height:100vh}
 .tag-lang{background:#e8f4e8;color:#2d5a28}
 .tag-handoff{background:#fef0e6;color:#e07b39}
 .tag-human{background:#e8f4e8;color:#2d5a28}
+.tag-cost{background:#eef6ee;color:#2d5a28;border:1px solid #cfe3cd}
 .chat-panel{display:flex;flex-direction:column;height:calc(100vh - 220px);min-height:400px}
 .chat-panel-header{display:flex;align-items:center;gap:12px;padding:16px;background:#fff;border-radius:14px 14px 0 0;border:1.5px solid #e8f0e5;border-bottom:none}
 .back-btn{background:none;border:none;color:#4a7c45;font-size:14px;font-weight:600;cursor:pointer}
@@ -167,6 +168,7 @@ body{background:#f0f4f0;min-height:100vh}
       <div class="stat-card"><div class="stat-icon">&#128231;</div><div class="stat-label">Emails Collected</div><div class="stat-value" id="stat-emails">-</div><div class="stat-change">Registered customers</div></div>
       <div class="stat-card"><div class="stat-icon">&#129309;</div><div class="stat-label">Handoff Requests</div><div class="stat-value" id="stat-handoffs">-</div><div class="stat-change">Wanted human agent</div></div>
       <div class="stat-card"><div class="stat-icon">&#127758;</div><div class="stat-label">Languages</div><div class="stat-value" id="stat-langs">-</div><div class="stat-change">Different languages</div></div>
+      <div class="stat-card"><div class="stat-icon">&#128176;</div><div class="stat-label">API Cost</div><div class="stat-value" id="stat-cost">-</div><div class="stat-change" id="stat-cost-today">-</div></div>
     </div>
     <div class="charts-row">
       <div class="card"><div class="card-title">Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
@@ -260,6 +262,20 @@ const auth = getAuth(app);
 const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
+
+// ===== API COST (Claude Haiku 4.5) =====
+// Τιμές Anthropic ανά token (USD): input $1/MTok, output $5/MTok,
+// cache write 1.25x input, cache read 0.10x input. Άλλαξέ τις μόνο αν αλλάξει η τιμολόγηση.
+const PRICE = { in: 1/1e6, out: 5/1e6, cacheW: 1.25/1e6, cacheR: 0.10/1e6 };
+const EUR_RATE = 0.92; // πρόχειρη ισοτιμία USD->EUR (μόνο για ενδεικτικό €)
+function convCostUSD(c){
+  if(!c) return 0;
+  return (c.tokensIn||0)*PRICE.in + (c.tokensOut||0)*PRICE.out
+       + (c.cacheWrite||0)*PRICE.cacheW + (c.cacheRead||0)*PRICE.cacheR;
+}
+function hasCost(c){ return !!(c && (c.tokensIn||c.tokensOut||c.cacheWrite||c.cacheRead)); }
+function fmtUSD(u){ return '$' + u.toFixed(u>=0.1?2:4); }
+function fmtCostFull(u){ return fmtUSD(u) + ' (~\u20ac' + (u*EUR_RATE).toFixed(u*EUR_RATE>=0.1?2:4) + ')'; }
 
 const SRC_ICONS = {
   ai: '&#129302;', social: '&#128241;', search: '&#128269;',
@@ -568,6 +584,13 @@ function updateAll() {
   document.getElementById('stat-handoffs').textContent = handoffs;
   document.getElementById('stat-langs').textContent = langs||1;
 
+  // ===== Συνολικό κόστος API (μόνο συνομιλίες που έχουν καταγραμμένα tokens) =====
+  var totalCost = allConvs.reduce(function(s,c){ return s + convCostUSD(c); }, 0);
+  var todayCost = allConvs.filter(function(c){ return new Date(c.startedAt).toDateString()===new Date().toDateString(); })
+                          .reduce(function(s,c){ return s + convCostUSD(c); }, 0);
+  document.getElementById('stat-cost').textContent = fmtUSD(totalCost);
+  document.getElementById('stat-cost-today').textContent = fmtUSD(todayCost) + ' today';
+
   var days = Array.from({length:7},(_,i)=>{var d=new Date();d.setDate(d.getDate()-6+i);return d;});
   var counts = days.map(d=>allConvs.filter(c=>c.startedAt&&new Date(c.startedAt).toDateString()===d.toDateString()).length);
   var max = Math.max(...counts,1);
@@ -610,6 +633,7 @@ function updateAll() {
     if(c.language)tags+='<span class="tag tag-lang">'+(LANGS[c.language]||c.language)+'</span>';
     if(c.handoffRequested&&!c.humanJoined&&!c.handoffResolved)tags+='<span class="tag tag-handoff">Handoff pending</span>';
     if(c.humanJoined)tags+='<span class="tag tag-human">You are live</span>';
+    if(hasCost(c))tags+='<span class="tag tag-cost" title="Κόστος API αυτής της συνομιλίας">&#128176; '+fmtCostFull(convCostUSD(c))+'</span>';
     return '<div class="'+cls+'" style="position:relative" onclick="openConv(\''+c.id+'\')">' +
   '<button onclick="event.stopPropagation();deleteConv(\''+c.id+'\')" style="position:absolute;top:8px;right:8px;background:#fee;border:1px solid #fcc;color:#c00;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer">Delete</button>' +
       '<div class="conv-header"><div class="conv-email">'+(c.email&&c.email!=='skipped'&&c.email!=='anonymous'?esc(c.email):'Anonymous')+'</div><div class="conv-time">'+time+'</div></div>' +
