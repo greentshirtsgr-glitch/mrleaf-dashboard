@@ -242,6 +242,7 @@ body{background:#f0f4f0;min-height:100vh}
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { getFirestore, collection, doc, setDoc, onSnapshot, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBHR7c9HCOXizWGutDmCGJxcAaEKJTnO5I",
@@ -255,6 +256,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
@@ -340,6 +342,65 @@ function sendBrowserNotification(title, body) {
     n.onclick = function() { window.focus(); showTab('conversations'); };
   }
 }
+
+// ============ LOGIN GATE — auth required before ANY customer data loads ============
+// Το dashboard διαβάζει conversations/visitors/cart_events (collection list). Με
+// τους νέους Firestore rules, το list επιτρέπεται ΜΟΝΟ σε συνδεδεμένο admin. Γι' αυτό
+// ΠΡΩΤΑ login, ΜΕΤΑ data: το top-level await πιο κάτω κρατάει το module σταματημένο
+// μέχρι να συνδεθείς, οπότε κανένα onSnapshot/getDocs δεν τρέχει πριν το login.
+function gtsShowLogin(){ var o=document.getElementById('gts-login-overlay'); if(o) o.style.display='flex'; }
+function gtsHideLogin(){ var o=document.getElementById('gts-login-overlay'); if(o) o.style.display='none'; }
+async function gtsDoLogin(){
+  var email=(document.getElementById('gts-login-email').value||'').trim();
+  var pass=document.getElementById('gts-login-pass').value||'';
+  var err=document.getElementById('gts-login-err');
+  err.textContent='';
+  if(!email||!pass){ err.textContent='Συμπλήρωσε email και κωδικό.'; return; }
+  var b=document.getElementById('gts-login-btn'); b.disabled=true; b.textContent='Σύνδεση...';
+  try{
+    await signInWithEmailAndPassword(auth, email, pass);
+  }catch(e){
+    err.textContent='Λάθος email ή κωδικός.';
+    b.disabled=false; b.textContent='Σύνδεση';
+  }
+}
+window.gtsLogout=function(){ signOut(auth).then(function(){ location.reload(); }); };
+
+(function gtsInjectLoginUI(){
+  var ov=document.createElement('div');
+  ov.id='gts-login-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:linear-gradient(135deg,#2d5a28,#4a7c45)';
+  ov.innerHTML=
+    '<div style="background:#fff;border-radius:16px;padding:32px 28px;width:320px;max-width:90vw;box-shadow:0 10px 40px rgba(0,0,0,0.25);text-align:center">'
+    +'<div style="font-size:30px;margin-bottom:8px">&#128274;</div>'
+    +'<div style="font-size:18px;font-weight:700;color:#2d5a28;margin-bottom:4px">Mr.Leaf Dashboard</div>'
+    +'<div style="font-size:13px;color:#888;margin-bottom:20px">Σύνδεση διαχειριστή</div>'
+    +'<input id="gts-login-email" type="email" placeholder="Email" autocomplete="username" style="width:100%;padding:11px 12px;margin-bottom:10px;border:1px solid #cfd8cf;border-radius:8px;font-size:14px">'
+    +'<input id="gts-login-pass" type="password" placeholder="Κωδικός" autocomplete="current-password" style="width:100%;padding:11px 12px;margin-bottom:6px;border:1px solid #cfd8cf;border-radius:8px;font-size:14px">'
+    +'<div id="gts-login-err" style="color:#c0392b;font-size:12px;min-height:16px;margin-bottom:10px;text-align:left"></div>'
+    +'<button id="gts-login-btn" style="width:100%;padding:12px;background:#2d5a28;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Σύνδεση</button>'
+    +'</div>';
+  document.body.appendChild(ov);
+  document.getElementById('gts-login-btn').addEventListener('click', gtsDoLogin);
+  document.getElementById('gts-login-pass').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); gtsDoLogin(); } });
+  document.getElementById('gts-login-email').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('gts-login-pass').focus(); } });
+  var tr=document.querySelector('.topbar-right');
+  if(tr){
+    var lo=document.createElement('button');
+    lo.className='admin-btn';
+    lo.textContent='Logout';
+    lo.addEventListener('click', window.gtsLogout);
+    tr.appendChild(lo);
+  }
+})();
+
+await new Promise(function(resolve){
+  onAuthStateChanged(auth, function(user){
+    if(user){ gtsHideLogin(); resolve(); }
+    else { gtsShowLogin(); }
+  });
+});
+// ============ END LOGIN GATE ============
 
 onSnapshot(collection(db, 'conversations'), (snap) => {
   var prev = allConvs.map(c=>c.id);
