@@ -164,6 +164,7 @@ body{background:#f0f4f0;min-height:100vh}
   <div id="handoff-alerts"></div>
   <div id="tab-analytics">
     <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">&#128070;</div><div class="stat-label">Chat Opens</div><div class="stat-value" id="stat-opens">-</div><div class="stat-change" id="stat-opens-today">-</div></div>
       <div class="stat-card"><div class="stat-icon">&#128172;</div><div class="stat-label">Total Conversations</div><div class="stat-value" id="stat-total">-</div><div class="stat-change" id="stat-today">-</div></div>
       <div class="stat-card"><div class="stat-icon">&#128231;</div><div class="stat-label">Emails Collected</div><div class="stat-value" id="stat-emails">-</div><div class="stat-change">Registered customers</div></div>
       <div class="stat-card"><div class="stat-icon">&#129309;</div><div class="stat-label">Handoff Requests</div><div class="stat-value" id="stat-handoffs">-</div><div class="stat-change">Wanted human agent</div></div>
@@ -171,13 +172,8 @@ body{background:#f0f4f0;min-height:100vh}
       <div class="stat-card"><div class="stat-icon">&#128176;</div><div class="stat-label">API Cost</div><div class="stat-value" id="stat-cost">-</div><div class="stat-change" id="stat-cost-today">-</div></div>
     </div>
     <div class="card" style="margin-bottom:24px">
-      <div class="card-title">&#128202; Εβδομαδιαία Ανάλυση (Mr.Leaf Analyst)</div>
-      <div style="font-size:13px;color:#666;margin-bottom:14px">Τρέξε την ανάλυση χειροκίνητα, χωρίς να περιμένεις το αυτόματο Δευτεριάτικο cron.</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <button id="analysis-preview-btn" onclick="runWeeklyAnalysis(true)" style="padding:10px 18px;background:#fff;color:#2d5a28;border:1.5px solid #4a7c45;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Προεπισκόπηση (χωρίς email)</button>
-        <button id="analysis-send-btn" onclick="runWeeklyAnalysis(false)" style="padding:10px 18px;background:linear-gradient(135deg,#2d5a28,#4a7c45);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Στείλε Report Τώρα</button>
-      </div>
-      <div id="analysis-result"></div>
+      <div class="card-title">Chat Funnel</div>
+      <div id="funnel-chart" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="loading">Loading...</div></div>
     </div>
     <div class="charts-row">
       <div class="card"><div class="card-title">Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
@@ -253,7 +249,7 @@ body{background:#f0f4f0;min-height:100vh}
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { getFirestore, collection, doc, setDoc, onSnapshot, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, getIdToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBHR7c9HCOXizWGutDmCGJxcAaEKJTnO5I",
@@ -269,9 +265,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
-// TODO: βάλε το πραγματικό *.workers.dev URL του gts-analyst worker
-// (το βλέπεις στη σελίδα του Worker στο Cloudflare dashboard).
-const ANALYST_URL = 'https://gts-analyst.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
 
@@ -430,41 +423,6 @@ await new Promise(function(resolve){
 });
 // ============ END LOGIN GATE ============
 
-// ============ WEEKLY ANALYSIS — secure manual trigger button ============
-// Παίρνει το πραγματικό Firebase ID token του συνδεδεμένου admin και το στέλνει
-// στον analyst worker. Ο worker επαληθεύει την υπογραφή + το UID — τίποτα μόνιμο
-// ή μυστικό δεν μένει εκτεθειμένο εδώ στο client-side JS.
-window.runWeeklyAnalysis = async function(dry) {
-  var previewBtn = document.getElementById('analysis-preview-btn');
-  var sendBtn = document.getElementById('analysis-send-btn');
-  var out = document.getElementById('analysis-result');
-  if (previewBtn) previewBtn.disabled = true;
-  if (sendBtn) sendBtn.disabled = true;
-  if (out) out.innerHTML = '<div style="margin-top:12px;color:#888;font-size:13px">Εκτέλεση ανάλυσης... μπορεί να πάρει λίγα δευτερόλεπτα.</div>';
-  try {
-    var user = auth.currentUser;
-    if (!user) throw new Error('Δεν είσαι συνδεδεμένος.');
-    var idToken = await getIdToken(user, true);
-    var res = await fetch(ANALYST_URL + (dry ? '?dry=1' : ''), {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + idToken }
-    });
-    var data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || ('HTTP ' + res.status));
-    if (dry && data.html) {
-      out.innerHTML = '<div style="margin-top:14px;border:1px solid #e0e8dc;border-radius:10px;padding:16px;background:#fff;max-height:600px;overflow-y:auto">' + data.html + '</div>';
-    } else {
-      out.innerHTML = '<div style="margin-top:12px;color:#2d5a28;font-weight:600">&#9989; Το report στάλθηκε στο email σου.</div>';
-    }
-  } catch (e) {
-    out.innerHTML = '<div style="margin-top:12px;color:#c0392b">&#10060; ' + esc(String(e.message || e)) + '</div>';
-  } finally {
-    if (previewBtn) previewBtn.disabled = false;
-    if (sendBtn) sendBtn.disabled = false;
-  }
-};
-// ============ END WEEKLY ANALYSIS ============
-
 onSnapshot(collection(db, 'conversations'), (snap) => {
   var prev = allConvs.map(c=>c.id);
   allConvs = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
@@ -477,6 +435,7 @@ onSnapshot(collection(db, 'conversations'), (snap) => {
   });
   updateAll();
   renderHandoffAlerts();
+  updateFunnel();
 });
 
 onSnapshot(collection(db, 'cart_events'), (snap) => {
@@ -518,6 +477,8 @@ function findMatchingConv(visitor, dateStr) {
 onSnapshot(collection(db, 'visitors'), (snap) => {
   var now = Date.now();
   allVisitors = snap.docs.map(d=>({id:d.id,...d.data()}));
+  updateOpensStat();
+  updateFunnel();
   var online = allVisitors
     .filter(v=>(now-(v.lastSeen||0)) < 5*60*1000)
     .sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
@@ -618,6 +579,52 @@ onSnapshot(collection(db, 'visitors'), (snap) => {
     }).join('') : '<div class="empty">No referrers yet</div>';
   }
 });
+
+// ============ CHAT OPENS + FUNNEL ============
+// "Chat Opens" = πόσοι sessions πάτησαν το κουμπί του chat (visitors.chatOpened),
+// ανεξάρτητα από το αν έγραψαν ποτέ μήνυμα. Έτσι φαίνεται καθαρά το drop-off
+// ανάμεσα σε "άνοιξε το widget" και "όντως ρώτησε κάτι".
+function updateOpensStat() {
+  var elV = document.getElementById('stat-opens');
+  var elT = document.getElementById('stat-opens-today');
+  if (!elV) return;
+  var opened = allVisitors.filter(function(v){ return v.chatOpened === true; });
+  var todayStr = new Date().toDateString();
+  var openedToday = opened.filter(function(v){ return v.chatOpenedAt && new Date(v.chatOpenedAt).toDateString() === todayStr; });
+  elV.textContent = opened.length;
+  elT.textContent = openedToday.length + ' today';
+}
+
+// Funnel: άνοιξαν chat -> έγραψαν έστω 1 μήνυμα -> έφτασαν στη 2η ερώτηση
+// (εμφανίστηκε το email prompt) -> έδωσαν email.
+function updateFunnel() {
+  var fc = document.getElementById('funnel-chart');
+  if (!fc) return;
+  var opens = allVisitors.filter(function(v){ return v.chatOpened === true; }).length;
+  var started = allConvs.filter(function(c){
+    return (c.messages||[]).some(function(m){ return m.role === 'user'; });
+  }).length;
+  var reached2 = allConvs.filter(function(c){
+    return c.emailPromptShown === true || !!c.emailPromptOutcome;
+  }).length;
+  var gaveEmail = allConvs.filter(function(c){
+    return c.emailPromptOutcome === 'provided' || (c.email && c.email !== 'skipped' && c.email !== 'anonymous');
+  }).length;
+
+  var steps = [
+    { label: 'Άνοιξαν το chat', val: opens },
+    { label: 'Έγραψαν μήνυμα', val: started },
+    { label: 'Έφτασαν στη 2η ερώτηση', val: reached2 },
+    { label: 'Έδωσαν email', val: gaveEmail }
+  ];
+  fc.innerHTML = steps.map(function(s, i) {
+    var box = '<div style="flex:1;min-width:130px;text-align:center;background:#f7faf6;border:1px solid #e8f0e5;border-radius:10px;padding:12px">' +
+      '<div style="font-size:26px;font-weight:700;color:#2d5a28">' + s.val + '</div>' +
+      '<div style="font-size:11px;color:#888;margin-top:2px">' + s.label + '</div></div>';
+    var arrow = i < steps.length - 1 ? '<div style="font-size:20px;color:#c8d8c4;flex-shrink:0">&rarr;</div>' : '';
+    return box + arrow;
+  }).join('');
+}
 
 function updateAll() {
   var total = allConvs.length;
