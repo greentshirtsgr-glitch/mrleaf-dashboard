@@ -175,6 +175,15 @@ body{background:#f0f4f0;min-height:100vh}
       <div class="card-title">Chat Funnel</div>
       <div id="funnel-chart" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="loading">Loading...</div></div>
     </div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">&#128202; Εβδομαδιαία Ανάλυση (Mr.Leaf Analyst)</div>
+      <div style="font-size:13px;color:#666;margin-bottom:14px">Τρέξε την ανάλυση χειροκίνητα, χωρίς να περιμένεις το αυτόματο Δευτεριάτικο cron.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button id="analysis-preview-btn" onclick="runWeeklyAnalysis(true)" style="padding:10px 18px;background:#fff;color:#2d5a28;border:1.5px solid #4a7c45;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Προεπισκόπηση (χωρίς email)</button>
+        <button id="analysis-send-btn" onclick="runWeeklyAnalysis(false)" style="padding:10px 18px;background:linear-gradient(135deg,#2d5a28,#4a7c45);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">Στείλε Report Τώρα</button>
+      </div>
+      <div id="analysis-result"></div>
+    </div>
     <div class="charts-row">
       <div class="card"><div class="card-title">Conversations per day (last 7 days)</div><div class="bar-chart" id="bar-chart"><div class="loading">Loading...</div></div></div>
       <div class="card"><div class="card-title">Languages</div><div class="lang-list" id="lang-chart"><div class="loading">Loading...</div></div></div>
@@ -249,7 +258,7 @@ body{background:#f0f4f0;min-height:100vh}
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { getFirestore, collection, doc, setDoc, onSnapshot, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { getMessaging, getToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, getIdToken } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBHR7c9HCOXizWGutDmCGJxcAaEKJTnO5I",
@@ -265,6 +274,9 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const PROXY = 'https://gts-api.greentshirts-gr.workers.dev';
+// TODO: βάλε το πραγματικό *.workers.dev URL του gts-analyst worker
+// (το βλέπεις στη σελίδα του Worker στο Cloudflare dashboard).
+const ANALYST_URL = 'https://gts-analyst.greentshirts-gr.workers.dev';
 const AVATAR = 'https://cdn.shopify.com/s/files/1/0994/4088/6089/files/leaf_avatar.webp?v=1775670216';
 const LANGS = {el:'Greek',en:'English',de:'German',fr:'French',it:'Italian',es:'Spanish',nl:'Dutch',pl:'Polish',pt:'Portuguese'};
 
@@ -422,6 +434,41 @@ await new Promise(function(resolve){
   });
 });
 // ============ END LOGIN GATE ============
+
+// ============ WEEKLY ANALYSIS — secure manual trigger button ============
+// Παίρνει το πραγματικό Firebase ID token του συνδεδεμένου admin και το στέλνει
+// στον analyst worker. Ο worker επαληθεύει την υπογραφή + το UID — τίποτα μόνιμο
+// ή μυστικό δεν μένει εκτεθειμένο εδώ στο client-side JS.
+window.runWeeklyAnalysis = async function(dry) {
+  var previewBtn = document.getElementById('analysis-preview-btn');
+  var sendBtn = document.getElementById('analysis-send-btn');
+  var out = document.getElementById('analysis-result');
+  if (previewBtn) previewBtn.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+  if (out) out.innerHTML = '<div style="margin-top:12px;color:#888;font-size:13px">Εκτέλεση ανάλυσης... μπορεί να πάρει λίγα δευτερόλεπτα.</div>';
+  try {
+    var user = auth.currentUser;
+    if (!user) throw new Error('Δεν είσαι συνδεδεμένος.');
+    var idToken = await getIdToken(user, true);
+    var res = await fetch(ANALYST_URL + (dry ? '?dry=1' : ''), {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + idToken }
+    });
+    var data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || ('HTTP ' + res.status));
+    if (dry && data.html) {
+      out.innerHTML = '<div style="margin-top:14px;border:1px solid #e0e8dc;border-radius:10px;padding:16px;background:#fff;max-height:600px;overflow-y:auto">' + data.html + '</div>';
+    } else {
+      out.innerHTML = '<div style="margin-top:12px;color:#2d5a28;font-weight:600">&#9989; Το report στάλθηκε στο email σου.</div>';
+    }
+  } catch (e) {
+    out.innerHTML = '<div style="margin-top:12px;color:#c0392b">&#10060; ' + esc(String(e.message || e)) + '</div>';
+  } finally {
+    if (previewBtn) previewBtn.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
+  }
+};
+// ============ END WEEKLY ANALYSIS ============
 
 onSnapshot(collection(db, 'conversations'), (snap) => {
   var prev = allConvs.map(c=>c.id);
